@@ -87,9 +87,11 @@ class SmartPlayerClient:
         r.raise_for_status()
         data = r.json()
         access = data["access_token"]
-        ttl = int(data.get("expires_in", 604800))
+        ttl = int(data.get("expires_in", 3600))
         expires_at = (datetime.now(timezone.utc) + timedelta(seconds=ttl)).isoformat()
-        self._write_token_cache(access, expires_at)
+        # creator.code é o X-User-Code correto — vem sempre na resposta de auth
+        creator_code = data.get("creator", {}).get("code") or self._user_code
+        self._write_token_cache(access, expires_at, creator_code)
         return access
 
     def _read_token_cache(self) -> Optional[dict]:
@@ -100,10 +102,14 @@ class SmartPlayerClient:
         except (json.JSONDecodeError, KeyError):
             return None
 
-    def _write_token_cache(self, access_token: str, expires_at: str) -> None:
+    def _write_token_cache(self, access_token: str, expires_at: str, creator_code: str = "") -> None:
         self._token_cache_path.parent.mkdir(parents=True, exist_ok=True)
         self._token_cache_path.write_text(
-            json.dumps({"access_token": access_token, "expires_at": expires_at}),
+            json.dumps({
+                "access_token": access_token,
+                "expires_at": expires_at,
+                "creator_code": creator_code,
+            }),
             encoding="utf-8",
         )
 
@@ -114,9 +120,12 @@ class SmartPlayerClient:
 
     async def _authed_headers(self) -> dict[str, str]:
         tok = await self.get_token()
+        # Usa o creator_code do cache (obtido na autenticação) como X-User-Code
+        cached = self._read_token_cache()
+        user_code = (cached or {}).get("creator_code") or self._user_code
         return {
             "Authorization": f"Bearer {tok}",
-            "X-User-Code": self._user_code,
+            "X-User-Code": user_code,
         }
 
     # -----------------------------------------------------------------------
