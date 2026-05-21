@@ -81,3 +81,10 @@ def test_mark_failed_increments_retry(tmp_path: Path):
     assert v.state == VideoState.FAILED
     assert v.retry_count == 2
     assert "timeout again" in v.last_error
+
+
+def test_transition_rejects_invalid_field(tmp_path: Path):
+    m = Manifest.load(tmp_path / "m.json")
+    m.upsert_video(VideoEntry(panda_id="v1", panda_folder="F", title="T"))
+    with pytest.raises(ValueError, match="VideoEntry has no field"):
+        m.transition("v1", VideoState.DOWNLOADED, nonexistent_field="oops")

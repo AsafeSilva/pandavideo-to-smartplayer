@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict
+from dataclasses import asdict, fields as dc_fields
 from pathlib import Path
 from typing import Optional
 
@@ -43,9 +43,13 @@ class Manifest:
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        with tmp.open("w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2, ensure_ascii=False)
-        os.replace(tmp, self.path)
+        try:
+            with tmp.open("w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2, ensure_ascii=False)
+            os.replace(tmp, self.path)
+        except:
+            tmp.unlink(missing_ok=True)
+            raise
 
     def upsert_folder(self, name: str, entry: FolderEntry) -> None:
         self.folders[name] = entry
@@ -56,7 +60,10 @@ class Manifest:
     def transition(self, panda_id: str, new_state: VideoState, **fields) -> VideoEntry:
         v = self.videos[panda_id]
         v.state = new_state
+        valid_fields = {f.name for f in dc_fields(VideoEntry)}
         for k, val in fields.items():
+            if k not in valid_fields:
+                raise ValueError(f"VideoEntry has no field {k!r}")
             setattr(v, k, val)
         v.updated_at = _utcnow()
         self.save()
