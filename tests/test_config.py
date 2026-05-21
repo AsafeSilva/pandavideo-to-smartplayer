@@ -19,7 +19,7 @@ def test_settings_from_env(monkeypatch):
 
 
 def test_settings_missing_required(monkeypatch):
-    monkeypatch.delenv("PANDA_API_KEY", raising=False)
+    monkeypatch.setenv("PANDA_API_KEY", "")  # string vazia — _require() rejeita; delenv seria recarregado pelo load_dotenv()
     monkeypatch.setenv("SMARTPLAYER_CLIENT_ID", "x")
     monkeypatch.setenv("SMARTPLAYER_CLIENT_SECRET", "x")
     monkeypatch.setenv("SMARTPLAYER_USER_CODE", "x")

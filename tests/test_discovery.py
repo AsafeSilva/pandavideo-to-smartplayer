@@ -31,7 +31,9 @@ class FakePandaClient:
                               status="converted")],
         }
 
-    async def list_folders(self):
+    async def list_folders(self, parent_folder_id=None):
+        if parent_folder_id is not None:
+            return []  # sem subpastas no fake
         return self.folders
 
     async def list_videos(self, folder_id, limit=100):

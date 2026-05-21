@@ -65,8 +65,12 @@ async def upload_one(
     v = manifest.videos[video_id]
 
     if v.state == VideoState.DOWNLOADED:
+        display_title = v.title
+        if " / " in v.panda_folder:
+            subfolder_name = v.panda_folder.rsplit(" / ", 1)[1]
+            display_title = f"[{subfolder_name}] {v.title}"
         code = await sp.create_media(
-            name=v.title,
+            name=display_title,
             description=v.description,
             external_id=v.panda_id,
             total_size=v.size_bytes,
@@ -117,7 +121,15 @@ async def _ensure_sp_folder(sp, manifest: Manifest, folder_name: str) -> str:
     f = manifest.folders.get(folder_name)
     if f and f.sp_folder_code:
         return f.sp_folder_code
-    code = await sp.create_folder(folder_name)
+
+    if " / " in folder_name:
+        # "EDUCACIONAL | X / Subpasta" → cria pai primeiro, depois filho
+        parent_name, child_name = folder_name.rsplit(" / ", 1)
+        parent_code = await _ensure_sp_folder(sp, manifest, parent_name)
+        code = await sp.create_folder(child_name, parent_code=parent_code)
+    else:
+        code = await sp.create_folder(folder_name)
+
     new_entry = FolderEntry(
         panda_folder_id=f.panda_folder_id if f else "",
         sp_folder_code=code,

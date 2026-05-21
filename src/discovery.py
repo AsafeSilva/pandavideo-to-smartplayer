@@ -33,7 +33,16 @@ async def _collect_videos(panda, manifest: Manifest, folder_id: str, folder_labe
     if count == 0:
         subfolders = await panda.list_folders(parent_folder_id=folder_id)
         for sub in subfolders:
-            count += await _collect_videos(panda, manifest, sub.id, folder_label)
+            sub_label = f"{folder_label} / {sub.name}"
+            existing_sub = manifest.folders.get(sub_label)
+            manifest.upsert_folder(
+                sub_label,
+                FolderEntry(
+                    panda_folder_id=sub.id,
+                    sp_folder_code=existing_sub.sp_folder_code if existing_sub else None,
+                ),
+            )
+            count += await _collect_videos(panda, manifest, sub.id, sub_label)
 
     return count
 
