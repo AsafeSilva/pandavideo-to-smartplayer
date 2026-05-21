@@ -45,8 +45,9 @@ class PandaVideo(BaseModel):
     description: str = ""
     folder_id: Optional[str] = None
     thumbnail: Optional[str] = None
-    length: int = 0
-    size: int = 0
+    length: float = 0
+    size: float = 0
+    storage_size: float = 0
     tags: list[str] = Field(default_factory=list)
     status: str = "unknown"
     created_at: Optional[str] = None
