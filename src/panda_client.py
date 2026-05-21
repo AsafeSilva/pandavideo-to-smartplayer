@@ -1,6 +1,7 @@
 """Cliente assíncrono da API Panda Video."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -16,9 +17,15 @@ PANDA_BASE_URL = "https://api-v2.pandavideo.com.br"
 
 
 def _retry_http():
+    # Allow fast retries in tests via env var (RETRY_FAST=1)
+    fast = os.environ.get("RETRY_FAST") == "1"
     return retry(
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=0.01, min=0, max=0.1),
+        wait=wait_exponential(
+            multiplier=0.01 if fast else 1,
+            min=0 if fast else 4,
+            max=0.1 if fast else 30,
+        ),
         retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TransportError)),
         reraise=True,
     )

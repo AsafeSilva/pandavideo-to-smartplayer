@@ -162,17 +162,29 @@ def cmd_cleanup(manifest_path: Path = DEFAULT_MANIFEST) -> None:
             if p.exists():
                 p.unlink()
                 removed += 1
+            v.local_video_path = None
             if v.local_thumb_path:
                 pt = Path(v.local_thumb_path)
                 if pt.exists():
                     pt.unlink()
+                v.local_thumb_path = None
+    manifest.save()
     print(f"Arquivos removidos: {removed}")
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    settings = Settings.from_env()
 
+    # export and cleanup don't need API credentials
+    if args.command == "export":
+        cmd_export()
+        return 0
+    if args.command == "cleanup":
+        cmd_cleanup()
+        return 0
+
+    # all other commands need settings
+    settings = Settings.from_env()
     from datetime import datetime
     from src.logging_setup import configure_logging
     log_path = Path("logs") / f"migration_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
@@ -187,13 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "retry-failed":
         asyncio.run(cmd_retry_failed(args))
         return 0
-    if args.command == "export":
-        cmd_export()
-        return 0
-    if args.command == "cleanup":
-        cmd_cleanup()
-        return 0
-    print(f"Comando {args.command!r} ainda não implementado.")
+    print(f"Comando {args.command!r} não reconhecido.")
     return 1
 
 

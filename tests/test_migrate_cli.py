@@ -114,3 +114,8 @@ def test_cmd_cleanup_removes_done_files(tmp_path):
 
     cmd_cleanup(manifest_path=tmp_path / "manifest.json")
     assert not f.exists()
+
+    # Verify manifest is persisted with cleared paths
+    from src.manifest import Manifest as M2
+    reloaded = M2.load(tmp_path / "manifest.json")
+    assert reloaded.videos["v1"].local_video_path is None

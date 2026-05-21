@@ -5,7 +5,8 @@ from src.panda_client import PandaClient
 
 
 @pytest.mark.asyncio
-async def test_list_folders_retries_on_5xx(httpx_mock: HTTPXMock):
+async def test_list_folders_retries_on_5xx(httpx_mock: HTTPXMock, monkeypatch):
+    monkeypatch.setenv("RETRY_FAST", "1")
     httpx_mock.add_response(
         url="https://api-v2.pandavideo.com.br/folders",
         status_code=500,
