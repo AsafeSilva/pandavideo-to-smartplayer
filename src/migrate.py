@@ -34,6 +34,8 @@ def build_parser() -> argparse.ArgumentParser:
     pr = sub.add_parser("run", help="Executa pipeline de migração")
     pr.add_argument("--dry-run", action="store_true")
     pr.add_argument("--resume", action="store_true")
+    pr.add_argument("--limit", type=int, default=None, metavar="N",
+                    help="Processar apenas os primeiros N vídeos (útil para testes)")
 
     sub.add_parser("retry-failed", help="Reprocessa vídeos no estado FAILED")
     sub.add_parser("export", help="Gera migration_log.md e .csv a partir do manifest")
@@ -92,6 +94,7 @@ async def cmd_run(
                    user_code=settings.sp_user_code,
                    token_cache_path=token_cache,
                ) as sp:
+        limit = getattr(args, "limit", None)
         await run_pipeline(
             panda=panda,
             sp=sp,
@@ -100,6 +103,7 @@ async def cmd_run(
             max_download_concurrency=settings.max_download_concurrency,
             max_upload_concurrency=settings.max_upload_concurrency,
             quality=settings.panda_quality,
+            limit=limit,
         )
 
     export_markdown(manifest, DEFAULT_LOG_MD)

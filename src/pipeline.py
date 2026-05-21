@@ -149,6 +149,7 @@ async def run_pipeline(
     max_upload_concurrency: int = 3,
     poll_interval: float = 30.0,
     quality: str = "original",
+    limit: int | None = None,
 ) -> None:
     """Orquestra workers de download e upload via filas asyncio."""
     # Garante pasta no SP para cada folder do manifest
@@ -165,7 +166,10 @@ async def run_pipeline(
                   VideoState.SP_UPLOAD_URLS_READY, VideoState.UPLOADING, VideoState.SP_PROCESSING,
                   VideoState.SP_COMPLETED)
 
-    for v in manifest.videos_in_state(*pre_download):
+    pending = manifest.videos_in_state(*pre_download)
+    if limit is not None:
+        pending = pending[:limit]
+    for v in pending:
         await to_download.put(v.panda_id)
     for v in manifest.videos_in_state(*pre_upload):
         await to_upload.put(v.panda_id)
