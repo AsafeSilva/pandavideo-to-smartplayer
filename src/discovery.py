@@ -14,9 +14,13 @@ async def discover(panda, manifest: Manifest, prefix: str) -> None:
     manifest.discovered_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     for folder in selected:
+        existing = manifest.folders.get(folder.name)
         manifest.upsert_folder(
             folder.name,
-            FolderEntry(panda_folder_id=folder.id, sp_folder_code=None),
+            FolderEntry(
+                panda_folder_id=folder.id,
+                sp_folder_code=existing.sp_folder_code if existing else None,
+            ),
         )
         videos = await panda.list_videos(folder.id)
         for v in videos:

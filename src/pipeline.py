@@ -7,6 +7,7 @@ from pathlib import Path
 
 from src.manifest import Manifest
 from src.models import FolderEntry, VideoState
+from src.smartplayer_client import build_embed_url
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +49,6 @@ async def download_one(
         )
 
 
-from src.smartplayer_client import build_embed_url  # noqa: E402
-
-
 SP_TERMINAL_STATUSES = {"COMPLETED"}
 SP_ERROR_STATUSES = {"ERROR"}
 
@@ -78,10 +76,10 @@ async def upload_one(
     if v.state == VideoState.SP_MEDIA_CREATED:
         urls = await sp.get_upload_urls(v.sp_media_code)
         manifest.transition(video_id, VideoState.SP_UPLOAD_URLS_READY)
-        v._upload_urls = urls  # type: ignore[attr-defined]
+        # urls used immediately below — no need to persist on video entry
 
     if v.state == VideoState.SP_UPLOAD_URLS_READY:
-        urls = getattr(v, "_upload_urls", None) or await sp.get_upload_urls(v.sp_media_code)
+        urls = await sp.get_upload_urls(v.sp_media_code)
         await sp.upload_binary(urls["urlUploadVideo"], v.local_video_path, "video/mp4")
         if v.local_thumb_path:
             await sp.upload_binary(urls["urlUploadPoster"], v.local_thumb_path, "image/jpeg")

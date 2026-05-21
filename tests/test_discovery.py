@@ -63,3 +63,24 @@ async def test_discovery_persists_metadata(tmp_path: Path):
     assert v1.size_bytes == 10_000_000
     assert v1.thumbnail_url == "https://t/v1.jpg"
     assert v1.state == VideoState.PENDING
+
+
+@pytest.mark.asyncio
+async def test_discovery_preserves_sp_folder_code(tmp_path: Path):
+    """Segunda chamada a discover() não deve sobrescrever sp_folder_code já mapeado."""
+    from src.models import FolderEntry
+    panda = FakePandaClient()
+    m = Manifest.load(tmp_path / "m.json")
+    await discover(panda, m, prefix="EDUCACIONAL |")
+
+    # Simula que run_pipeline preencheu o sp_folder_code
+    m.upsert_folder(
+        "EDUCACIONAL | LIVES",
+        FolderEntry(panda_folder_id="f1", sp_folder_code="sp-xyz"),
+    )
+    m.save()
+
+    # Segunda chamada ao discover — não deve sobrescrever
+    await discover(panda, m, prefix="EDUCACIONAL |")
+
+    assert m.folders["EDUCACIONAL | LIVES"].sp_folder_code == "sp-xyz"
