@@ -1,4 +1,3 @@
-from datetime import datetime
 from src.models import VideoState, VideoEntry, FolderEntry
 
 
