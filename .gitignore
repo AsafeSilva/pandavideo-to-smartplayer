@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+data/downloads/
+data/manifest.json
+data/token_cache.json
+data/migration_log.md
+data/migration_log.csv
+logs/*.log
+.DS_Store
