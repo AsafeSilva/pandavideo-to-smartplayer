@@ -1,6 +1,7 @@
 """Cliente assíncrono da API Panda Video."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -53,7 +54,7 @@ class PandaClient:
 
     async def list_folders(self, parent_folder_id: Optional[str] = None) -> list[PandaFolder]:
         params: dict[str, str] = {}
-        if parent_folder_id:
+        if parent_folder_id is not None:
             params["parent_folder_id"] = parent_folder_id
         r = await self._client.get(f"{self._base_url}/folders", params=params)
         r.raise_for_status()
@@ -118,7 +119,6 @@ class PandaClient:
         if r.status_code == 400:
             return None
         r.raise_for_status()
-        return None
 
     # ------------------------------------------------------------------
     # Task 6 — download_file em streaming
@@ -126,7 +126,6 @@ class PandaClient:
 
     async def download_file(self, url: str, dest_path) -> int:
         """Baixa em streaming para dest_path. Retorna bytes escritos."""
-        from pathlib import Path
         dest = Path(dest_path)
         dest.parent.mkdir(parents=True, exist_ok=True)
         written = 0
