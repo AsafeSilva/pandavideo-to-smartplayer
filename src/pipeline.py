@@ -67,8 +67,9 @@ async def upload_one(
     if v.state == VideoState.DOWNLOADED:
         display_title = v.title
         if " / " in v.panda_folder:
-            subfolder_name = v.panda_folder.rsplit(" / ", 1)[1]
-            display_title = f"[{subfolder_name}] {v.title}"
+            # Usa caminho completo sem o prefixo "EDUCACIONAL | " (comum a todas as pastas)
+            folder_path = v.panda_folder.split(" | ", 1)[-1]  # "Aceleração de Agências / Editadas"
+            display_title = f"[{folder_path}] {v.title}"
         code = await sp.create_media(
             name=display_title,
             description=v.description,
