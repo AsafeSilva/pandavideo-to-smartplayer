@@ -8,9 +8,22 @@ from typing import Optional
 
 import httpx
 from pydantic import BaseModel, ConfigDict
+from tenacity import (
+    retry, stop_after_attempt, wait_exponential,
+    retry_if_exception_type,
+)
 
 
 SP_AUTH_URL = "https://services.scaleup.com.br/authentication/v1/oauth/token"
+
+
+def _retry_http():
+    return retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=0.01, min=0, max=0.1),
+        retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TransportError)),
+        reraise=True,
+    )
 SP_BASE_URL = "https://services.scaleup.com.br/backoffice/v1"
 SP_EMBED_URL_TEMPLATE = "https://player.scaleup.com.br/embed/{code}"
 REFRESH_WINDOW_MIN = 5
@@ -49,6 +62,7 @@ class SmartPlayerClient:
     async def __aexit__(self, *exc) -> None:
         await self._client.aclose()
 
+    @_retry_http()
     async def get_token(self) -> str:
         cached = self._read_token_cache()
         if cached and not self._near_expiry(cached["expires_at"]):
@@ -102,6 +116,7 @@ class SmartPlayerClient:
     # Task 8 — folders
     # -----------------------------------------------------------------------
 
+    @_retry_http()
     async def create_folder(self, name: str, parent_code: Optional[str] = None) -> str:
         headers = await self._authed_headers()
         headers["Content-Type"] = "application/json"
@@ -122,6 +137,7 @@ class SmartPlayerClient:
     # Task 9 — media lifecycle
     # -----------------------------------------------------------------------
 
+    @_retry_http()
     async def create_media(
         self,
         name: str,
@@ -150,6 +166,7 @@ class SmartPlayerClient:
             return data[0]["code"]
         return data["code"]
 
+    @_retry_http()
     async def get_upload_urls(self, media_code: str) -> dict[str, str]:
         headers = await self._authed_headers()
         r = await self._client.get(
@@ -183,6 +200,7 @@ class SmartPlayerClient:
                 )
         r.raise_for_status()
 
+    @_retry_http()
     async def poll_status(self, media_code: str) -> str:
         headers = await self._authed_headers()
         r = await self._client.get(

@@ -6,9 +6,22 @@ from typing import Optional
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
+from tenacity import (
+    retry, stop_after_attempt, wait_exponential,
+    retry_if_exception_type,
+)
 
 
 PANDA_BASE_URL = "https://api-v2.pandavideo.com.br"
+
+
+def _retry_http():
+    return retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=0.01, min=0, max=0.1),
+        retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TransportError)),
+        reraise=True,
+    )
 
 
 class PandaFolder(BaseModel):
@@ -52,6 +65,7 @@ class PandaClient:
     # Task 4 — list_folders e list_videos
     # ------------------------------------------------------------------
 
+    @_retry_http()
     async def list_folders(self, parent_folder_id: Optional[str] = None) -> list[PandaFolder]:
         params: dict[str, str] = {}
         if parent_folder_id is not None:
@@ -62,17 +76,21 @@ class PandaClient:
         raw = data.get("folders", data) if isinstance(data, dict) else data
         return [PandaFolder.model_validate(item) for item in raw]
 
+    @_retry_http()
+    async def _fetch_video_page(self, folder_id: str, page: int, limit: int) -> list[dict]:
+        r = await self._client.get(
+            f"{self._base_url}/videos",
+            params={"folder_id": folder_id, "page": page, "limit": limit},
+        )
+        r.raise_for_status()
+        data = r.json()
+        return data.get("videos", data) if isinstance(data, dict) else data
+
     async def list_videos(self, folder_id: str, limit: int = 100) -> list[PandaVideo]:
         videos: list[PandaVideo] = []
         page = 1
         while True:
-            r = await self._client.get(
-                f"{self._base_url}/videos",
-                params={"folder_id": folder_id, "page": page, "limit": limit},
-            )
-            r.raise_for_status()
-            data = r.json()
-            batch = data.get("videos", data) if isinstance(data, dict) else data
+            batch = await self._fetch_video_page(folder_id, page, limit)
             if not batch:
                 break
             videos.extend(PandaVideo.model_validate(item) for item in batch)
@@ -83,6 +101,7 @@ class PandaClient:
     # Task 5 — request_download e poll_download
     # ------------------------------------------------------------------
 
+    @_retry_http()
     async def request_download(
         self,
         video_id: str,
@@ -103,6 +122,7 @@ class PandaClient:
         if r.status_code not in (200, 201, 202):
             r.raise_for_status()
 
+    @_retry_http()
     async def poll_download(
         self,
         video_id: str,
