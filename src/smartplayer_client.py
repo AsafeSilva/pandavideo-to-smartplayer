@@ -97,3 +97,23 @@ class SmartPlayerClient:
             "Authorization": f"Bearer {tok}",
             "X-User-Code": self._user_code,
         }
+
+    # -----------------------------------------------------------------------
+    # Task 8 — folders
+    # -----------------------------------------------------------------------
+
+    async def create_folder(self, name: str, parent_code: Optional[str] = None) -> str:
+        headers = await self._authed_headers()
+        headers["Content-Type"] = "application/json"
+        params: dict[str, str] = {}
+        if parent_code is not None:
+            params["root-folder-code"] = parent_code
+        r = await self._client.post(
+            f"{self._base_url}/folders",
+            headers=headers,
+            params=params,
+            json={"name": name},
+        )
+        r.raise_for_status()
+        data = r.json()
+        return data["code"]
