@@ -45,3 +45,39 @@ def test_save_is_atomic(tmp_path: Path, monkeypatch):
     # arquivo original ainda válido com título "ok"
     m_orig = Manifest.load(path)
     assert m_orig.videos["v1"].title == "ok"
+
+
+def test_transition_updates_state_and_persists(tmp_path: Path):
+    path = tmp_path / "manifest.json"
+    m = Manifest.load(path)
+    m.upsert_video(VideoEntry(panda_id="v1", panda_folder="F", title="T"))
+    m.transition("v1", VideoState.DOWNLOADED, local_video_path="data/downloads/v1.mp4")
+
+    reloaded = Manifest.load(path)
+    assert reloaded.videos["v1"].state == VideoState.DOWNLOADED
+    assert reloaded.videos["v1"].local_video_path == "data/downloads/v1.mp4"
+
+
+def test_videos_in_state_filters(tmp_path: Path):
+    m = Manifest.load(tmp_path / "m.json")
+    m.upsert_video(VideoEntry(panda_id="v1", panda_folder="F", title="T1"))
+    m.upsert_video(VideoEntry(panda_id="v2", panda_folder="F", title="T2", state=VideoState.DOWNLOADED))
+    m.upsert_video(VideoEntry(panda_id="v3", panda_folder="F", title="T3", state=VideoState.DONE))
+
+    pending = m.videos_in_state(VideoState.PENDING)
+    assert {v.panda_id for v in pending} == {"v1"}
+
+    in_flight = m.videos_in_state(VideoState.DOWNLOADED, VideoState.SP_PROCESSING)
+    assert {v.panda_id for v in in_flight} == {"v2"}
+
+
+def test_mark_failed_increments_retry(tmp_path: Path):
+    m = Manifest.load(tmp_path / "m.json")
+    m.upsert_video(VideoEntry(panda_id="v1", panda_folder="F", title="T"))
+    m.mark_failed("v1", "timeout on download")
+    m.mark_failed("v1", "timeout again")
+
+    v = m.videos["v1"]
+    assert v.state == VideoState.FAILED
+    assert v.retry_count == 2
+    assert "timeout again" in v.last_error
