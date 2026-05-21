@@ -1,4 +1,4 @@
-"""CLI principal do migrador Panda → SmartPlayer."""
+"""CLI principal do migrador Panda -> SmartPlayer."""
 from __future__ import annotations
 
 import argparse
@@ -25,7 +25,7 @@ DEFAULT_LOG_CSV = Path("data/migration_log.csv")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="migrate", description="Panda Video → SmartPlayer")
+    p = argparse.ArgumentParser(prog="migrate", description="Panda Video -> SmartPlayer")
     sub = p.add_subparsers(dest="command", required=True)
 
     pd = sub.add_parser("discover", help="Lista pastas/vídeos do Panda e popula manifest")
