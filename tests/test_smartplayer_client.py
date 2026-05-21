@@ -121,3 +121,100 @@ async def test_create_folder_with_parent(httpx_mock: HTTPXMock, tmp_path: Path):
     async with SmartPlayerClient("cid", "csec", "uc", cache) as c:
         code = await c.create_folder("Subpasta", parent_code="parent-x")
     assert code == "sp-fold-2"
+
+
+# ---------------------------------------------------------------------------
+# Task 9 — create_media, get_upload_urls, upload_binary, poll_status
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_create_media_returns_code(httpx_mock: HTTPXMock, tmp_path: Path):
+    cache = _stub_token_cache(tmp_path)
+    httpx_mock.add_response(
+        method="POST",
+        url="https://services.scaleup.com.br/backoffice/v1/medias",
+        json=[{"code": "media-xyz", "status": "DRAFT"}],
+    )
+    async with SmartPlayerClient("cid", "csec", "uc", cache) as c:
+        code = await c.create_media(
+            name="Aula 01",
+            description="Intro",
+            external_id="panda-v1",
+            total_size=12345,
+        )
+
+    assert code == "media-xyz"
+    req = httpx_mock.get_request()
+    body = json.loads(req.content)
+    assert body == [{
+        "name": "Aula 01",
+        "description": "Intro",
+        "externalId": "panda-v1",
+        "totalSize": 12345,
+        "publicMedia": True,
+    }]
+
+
+@pytest.mark.asyncio
+async def test_get_upload_urls(httpx_mock: HTTPXMock, tmp_path: Path):
+    cache = _stub_token_cache(tmp_path)
+    httpx_mock.add_response(
+        method="GET",
+        url="https://services.scaleup.com.br/backoffice/v1/medias/media-xyz",
+        json={
+            "code": "media-xyz",
+            "status": "DRAFT",
+            "urlsUpload": {
+                "urlUploadVideo": "https://sp-upload.example/v",
+                "urlUploadPoster": "https://sp-upload.example/p",
+            },
+        },
+    )
+    async with SmartPlayerClient("cid", "csec", "uc", cache) as c:
+        urls = await c.get_upload_urls("media-xyz")
+    assert urls == {
+        "urlUploadVideo": "https://sp-upload.example/v",
+        "urlUploadPoster": "https://sp-upload.example/p",
+    }
+
+
+@pytest.mark.asyncio
+async def test_upload_binary_puts_file(httpx_mock: HTTPXMock, tmp_path: Path):
+    cache = _stub_token_cache(tmp_path)
+    file_path = tmp_path / "video.mp4"
+    file_path.write_bytes(b"\x00\x01\x02fake")
+
+    httpx_mock.add_response(
+        method="PUT",
+        url="https://sp-upload.example/v",
+        status_code=200,
+        json={"success": True},
+    )
+    async with SmartPlayerClient("cid", "csec", "uc", cache) as c:
+        await c.upload_binary(
+            "https://sp-upload.example/v",
+            file_path,
+            content_type="video/mp4",
+        )
+
+    req = httpx_mock.get_request(method="PUT")
+    assert req.headers["Content-Type"] == "video/mp4"
+    assert req.content == b"\x00\x01\x02fake"
+
+
+@pytest.mark.asyncio
+async def test_poll_status(httpx_mock: HTTPXMock, tmp_path: Path):
+    cache = _stub_token_cache(tmp_path)
+    httpx_mock.add_response(
+        method="GET",
+        url="https://services.scaleup.com.br/backoffice/v1/medias/media-xyz",
+        json={"code": "media-xyz", "status": "COMPRESS_ENCODE"},
+    )
+    async with SmartPlayerClient("cid", "csec", "uc", cache) as c:
+        status = await c.poll_status("media-xyz")
+    assert status == "COMPRESS_ENCODE"
+
+
+def test_embed_url():
+    from src.smartplayer_client import build_embed_url
+    assert build_embed_url("abc123") == "https://player.scaleup.com.br/embed/abc123"

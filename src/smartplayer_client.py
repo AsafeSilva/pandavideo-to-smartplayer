@@ -117,3 +117,73 @@ class SmartPlayerClient:
         r.raise_for_status()
         data = r.json()
         return data["code"]
+
+    # -----------------------------------------------------------------------
+    # Task 9 — media lifecycle
+    # -----------------------------------------------------------------------
+
+    async def create_media(
+        self,
+        name: str,
+        description: str,
+        external_id: str,
+        total_size: int,
+        public_media: bool = True,
+    ) -> str:
+        headers = await self._authed_headers()
+        headers["Content-Type"] = "application/json"
+        payload = [{
+            "name": name,
+            "description": description,
+            "externalId": external_id,
+            "totalSize": total_size,
+            "publicMedia": public_media,
+        }]
+        r = await self._client.post(
+            f"{self._base_url}/medias",
+            headers=headers,
+            json=payload,
+        )
+        r.raise_for_status()
+        data = r.json()
+        if isinstance(data, list):
+            return data[0]["code"]
+        return data["code"]
+
+    async def get_upload_urls(self, media_code: str) -> dict[str, str]:
+        headers = await self._authed_headers()
+        r = await self._client.get(
+            f"{self._base_url}/medias/{media_code}",
+            headers=headers,
+        )
+        r.raise_for_status()
+        urls = r.json().get("urlsUpload") or {}
+        return urls
+
+    async def upload_binary(self, url: str, file_path, content_type: str) -> None:
+        path = Path(file_path)
+        size = path.stat().st_size
+        async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=30.0)) as raw:
+            with path.open("rb") as f:
+                r = await raw.put(
+                    url,
+                    content=f.read(),
+                    headers={
+                        "Content-Type": content_type,
+                        "Content-Length": str(size),
+                    },
+                )
+        r.raise_for_status()
+
+    async def poll_status(self, media_code: str) -> str:
+        headers = await self._authed_headers()
+        r = await self._client.get(
+            f"{self._base_url}/medias/{media_code}",
+            headers=headers,
+        )
+        r.raise_for_status()
+        return r.json().get("status", "UNKNOWN")
+
+
+def build_embed_url(media_code: str) -> str:
+    return SP_EMBED_URL_TEMPLATE.format(code=media_code)
