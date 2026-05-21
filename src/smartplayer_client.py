@@ -1,0 +1,99 @@
+"""Cliente assíncrono da API SmartPlayer (Scaleup)."""
+from __future__ import annotations
+
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Optional
+
+import httpx
+from pydantic import BaseModel, ConfigDict
+
+
+SP_AUTH_URL = "https://services.scaleup.com.br/authentication/v1/oauth/token"
+SP_BASE_URL = "https://services.scaleup.com.br/backoffice/v1"
+SP_EMBED_URL_TEMPLATE = "https://player.scaleup.com.br/embed/{code}"
+REFRESH_WINDOW_MIN = 5
+
+
+class SPMedia(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    code: str
+    status: str
+    urlsUpload: Optional[dict] = None
+
+
+class SmartPlayerClient:
+    def __init__(
+        self,
+        client_id: str,
+        client_secret: str,
+        user_code: str,
+        token_cache_path: Path,
+        base_url: str = SP_BASE_URL,
+        timeout: float = 60.0,
+    ):
+        self._client_id = client_id
+        self._client_secret = client_secret
+        self._user_code = user_code
+        self._token_cache_path = Path(token_cache_path)
+        self._base_url = base_url.rstrip("/")
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(timeout, connect=10.0),
+            http2=True,
+        )
+
+    async def __aenter__(self) -> "SmartPlayerClient":
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        await self._client.aclose()
+
+    async def get_token(self) -> str:
+        cached = self._read_token_cache()
+        if cached and not self._near_expiry(cached["expires_at"]):
+            return cached["access_token"]
+
+        r = await self._client.post(
+            SP_AUTH_URL,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "grant_type": "client_credentials",
+                "client_id": self._client_id,
+                "client_secret": self._client_secret,
+            },
+        )
+        r.raise_for_status()
+        data = r.json()
+        access = data["access_token"]
+        ttl = int(data.get("expires_in", 604800))
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=ttl)).isoformat()
+        self._write_token_cache(access, expires_at)
+        return access
+
+    def _read_token_cache(self) -> Optional[dict]:
+        if not self._token_cache_path.exists():
+            return None
+        try:
+            return json.loads(self._token_cache_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, KeyError):
+            return None
+
+    def _write_token_cache(self, access_token: str, expires_at: str) -> None:
+        self._token_cache_path.parent.mkdir(parents=True, exist_ok=True)
+        self._token_cache_path.write_text(
+            json.dumps({"access_token": access_token, "expires_at": expires_at}),
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def _near_expiry(expires_at_iso: str) -> bool:
+        expires = datetime.fromisoformat(expires_at_iso)
+        return expires - datetime.now(timezone.utc) < timedelta(minutes=REFRESH_WINDOW_MIN)
+
+    async def _authed_headers(self) -> dict[str, str]:
+        tok = await self.get_token()
+        return {
+            "Authorization": f"Bearer {tok}",
+            "X-User-Code": self._user_code,
+        }
