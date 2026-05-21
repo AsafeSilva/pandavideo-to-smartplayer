@@ -74,9 +74,7 @@ async def upload_one(
         manifest.transition(video_id, VideoState.SP_MEDIA_CREATED, sp_media_code=code)
 
     if v.state == VideoState.SP_MEDIA_CREATED:
-        urls = await sp.get_upload_urls(v.sp_media_code)
         manifest.transition(video_id, VideoState.SP_UPLOAD_URLS_READY)
-        # urls used immediately below — no need to persist on video entry
 
     if v.state == VideoState.SP_UPLOAD_URLS_READY:
         urls = await sp.get_upload_urls(v.sp_media_code)
