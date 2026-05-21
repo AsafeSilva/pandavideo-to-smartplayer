@@ -160,14 +160,22 @@ class SmartPlayerClient:
         urls = r.json().get("urlsUpload") or {}
         return urls
 
-    async def upload_binary(self, url: str, file_path, content_type: str) -> None:
+    async def upload_binary(self, url: str, file_path: "Path | str", content_type: str) -> None:
         path = Path(file_path)
         size = path.stat().st_size
+
+        async def _iter_file(f, chunk_size: int = 1024 * 1024):
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+
         async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=30.0)) as raw:
             with path.open("rb") as f:
                 r = await raw.put(
                     url,
-                    content=f.read(),
+                    content=_iter_file(f),
                     headers={
                         "Content-Type": content_type,
                         "Content-Length": str(size),
