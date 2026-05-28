@@ -6,12 +6,21 @@ import pytest
 from src.manifest import Manifest
 from src.models import FolderEntry, VideoEntry, VideoState
 from src.pipeline import run_pipeline
+from src.smartplayer_client import SPMedia
 
 
 class FakePanda:
-    async def request_download(self, video_id, quality, title): pass
+    async def get_video(self, video_id):
+        class _V:
+            video_external_id = video_id
+        return _V()
+
+    async def request_download(self, video_id, quality, title):
+        pass
+
     async def poll_download(self, video_id, quality="original", language="pt-BR"):
         return f"https://signed/{video_id}.mp4"
+
     async def download_file(self, url, dest):
         Path(dest).parent.mkdir(parents=True, exist_ok=True)
         Path(dest).write_bytes(b"x" * 100)
@@ -21,13 +30,25 @@ class FakePanda:
 class FakeSP:
     async def create_folder(self, name, parent_code=None):
         return f"sp-{name[:3]}"
+
     async def create_media(self, name, description, external_id, total_size, public_media=True):
-        return f"m-{external_id}"
+        return SPMedia(
+            code=f"m-{external_id}",
+            status="DRAFT",
+            urlsUpload={"urlUploadVideo": f"https://up/m-{external_id}/v"},
+        )
+
     async def get_upload_urls(self, code):
         return {"urlUploadVideo": "https://up/v", "urlUploadPoster": "https://up/p"}
-    async def upload_binary(self, url, file_path, content_type): pass
+
+    async def upload_binary(self, url, file_path, content_type):
+        pass
+
     async def poll_status(self, code):
         return "COMPLETED"
+
+    async def move_media(self, folder_code, media_codes):
+        pass
 
 
 @pytest.mark.asyncio
