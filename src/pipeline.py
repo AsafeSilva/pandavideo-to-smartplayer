@@ -16,6 +16,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _disk_used_gb(download_dir: Path) -> float:
+    if not download_dir.exists():
+        return 0.0
+    return sum(f.stat().st_size for f in download_dir.glob("*.mp4") if f.exists()) / (1024 ** 3)
+
+
 async def download_one(
     panda,
     manifest: Manifest,

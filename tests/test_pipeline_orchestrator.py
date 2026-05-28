@@ -75,3 +75,30 @@ async def test_run_pipeline_completes_all_pending(tmp_path: Path):
         v = m.videos[f"v{i}"]
         assert v.state == VideoState.DONE
         assert v.sp_embed_url is not None
+
+
+def test_disk_used_gb_soma_mp4s(tmp_path: Path):
+    dl = tmp_path / "downloads"
+    dl.mkdir()
+    (dl / "a.mp4").write_bytes(b"x" * 500)
+    (dl / "b.mp4").write_bytes(b"x" * 500)
+    (dl / "c.txt").write_bytes(b"x" * 9999)  # não deve ser contado
+
+    from src.pipeline import _disk_used_gb
+    result = _disk_used_gb(dl)
+
+    assert abs(result - 1000 / (1024 ** 3)) < 1e-12
+
+
+def test_disk_used_gb_pasta_vazia(tmp_path: Path):
+    dl = tmp_path / "downloads"
+    dl.mkdir()
+
+    from src.pipeline import _disk_used_gb
+    assert _disk_used_gb(dl) == 0.0
+
+
+def test_disk_used_gb_pasta_inexistente(tmp_path: Path):
+    from src.pipeline import _disk_used_gb
+    # glob numa pasta inexistente não lança exceção — retorna 0
+    assert _disk_used_gb(tmp_path / "nao_existe") == 0.0
