@@ -279,9 +279,9 @@ async def run_pipeline(
         counts: dict[str, int] = {}
         for v in manifest.videos.values():
             counts[v.state.value] = counts.get(v.state.value, 0) + 1
-        done = counts.get("DONE", 0)
-        failed = counts.get("FAILED", 0)
-        in_progress = {k: n for k, n in counts.items() if k not in ("DONE", "FAILED")}
+        done = counts.get("done", 0)
+        failed = counts.get("failed", 0)
+        in_progress = {k: n for k, n in counts.items() if k not in ("done", "failed")}
         parts = ", ".join(f"{k}:{n}" for k, n in sorted(in_progress.items()))
         logger.info("[progresso] %d/%d concluídos, %d falhas — %s", done, total, failed, parts or "nenhum em andamento")
 

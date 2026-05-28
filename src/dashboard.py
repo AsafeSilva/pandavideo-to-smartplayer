@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
+from src.models import VideoState
 from rich import box
 from rich.console import Group
 from rich.live import Live
@@ -105,8 +106,8 @@ class LiveDashboard:
         for v in self._manifest.videos.values():
             counts[v.state.value] = counts.get(v.state.value, 0) + 1
         total = len(self._manifest.videos)
-        done = counts.get("DONE", 0)
-        failed = counts.get("FAILED", 0)
+        done = counts.get("done", 0)
+        failed = counts.get("failed", 0)
 
         # ── cabeçalho ─────────────────────────────────────────────────────
         pct = done / total if total else 0
@@ -159,19 +160,14 @@ class LiveDashboard:
         up_panel = Panel(up_table, title="[bold green]Uploads / Encoding[/]", box=box.ROUNDED)
 
         # ── resumo de estados ──────────────────────────────────────────────
-        state_order = [
-            "PENDING", "DOWNLOAD_REQUESTED", "DOWNLOAD_READY", "DOWNLOADED",
-            "SP_MEDIA_CREATED", "SP_UPLOAD_URLS_READY", "UPLOADING",
-            "SP_PROCESSING", "SP_COMPLETED", "SP_MOVED", "DONE", "FAILED",
-        ]
         parts = []
-        for s in state_order:
-            n = counts.get(s, 0)
+        for state in VideoState:
+            n = counts.get(state.value, 0)
             if n:
-                label = s.replace("SP_", "").replace("DOWNLOAD_", "DL_").replace("_", " ")
-                if s == "DONE":
+                label = state.value.replace("sp_", "").replace("download_", "dl_").replace("_", " ").upper()
+                if state == VideoState.DONE:
                     parts.append(f"[bold green]DONE:{n}[/]")
-                elif s == "FAILED":
+                elif state == VideoState.FAILED:
                     parts.append(f"[bold red]FAILED:{n}[/]")
                 else:
                     parts.append(f"[dim]{label}:{n}[/]")
