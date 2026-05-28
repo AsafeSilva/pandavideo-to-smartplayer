@@ -6,6 +6,7 @@ import pytest
 from src.manifest import Manifest
 from src.models import FolderEntry, VideoEntry, VideoState
 from src.pipeline import upload_one
+from src.smartplayer_client import SPMedia
 
 
 class FakeSP:
@@ -13,13 +14,18 @@ class FakeSP:
         self.created = []
         self.upload_calls = 0
         self.poll_calls = 0
+        self.move_calls = []
 
     async def create_folder(self, name, parent_code=None):
         return f"sp-folder-{name[:3]}"
 
     async def create_media(self, name, description, external_id, total_size, public_media=True):
         self.created.append(external_id)
-        return f"sp-media-{external_id}"
+        return SPMedia(
+            code=f"sp-media-{external_id}",
+            status="DRAFT",
+            urlsUpload={"urlUploadVideo": f"https://up/sp-media-{external_id}/v"},
+        )
 
     async def get_upload_urls(self, code):
         return {
@@ -33,6 +39,9 @@ class FakeSP:
     async def poll_status(self, code):
         self.poll_calls += 1
         return "COMPLETED" if self.poll_calls >= 2 else "COMPRESS_ENCODE"
+
+    async def move_media(self, folder_code, media_codes):
+        self.move_calls.append((folder_code, media_codes))
 
 
 @pytest.mark.asyncio
@@ -58,3 +67,4 @@ async def test_upload_one_full_cycle(tmp_path: Path):
     assert v.sp_media_code == "sp-media-v1"
     assert v.sp_embed_url == "https://player.scaleup.com.br/embed/sp-media-v1"
     assert not Path(v.local_video_path).exists()  # cleanup
+    assert sp.move_calls == [("sp-folder-EDU", ["sp-media-v1"])]

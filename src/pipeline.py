@@ -73,10 +73,6 @@ async def upload_one(
 
     if v.state == VideoState.DOWNLOADED:
         display_title = v.title
-        if " / " in v.panda_folder:
-            # Usa caminho completo sem o prefixo "EDUCACIONAL | " (comum a todas as pastas)
-            folder_path = v.panda_folder.split(" | ", 1)[-1]  # "Aceleração de Agências / Editadas"
-            display_title = f"[{folder_path}] {v.title}"
         media = await sp.create_media(
             name=display_title,
             description=v.description,
@@ -122,6 +118,11 @@ async def upload_one(
         )
 
     if v.state == VideoState.SP_COMPLETED:
+        folder_code = await _ensure_sp_folder(sp, manifest, v.panda_folder)
+        await sp.move_media(folder_code, [v.sp_media_code])
+        manifest.transition(video_id, VideoState.SP_MOVED)
+
+    if v.state == VideoState.SP_MOVED:
         if cleanup and v.local_video_path:
             try:
                 Path(v.local_video_path).unlink(missing_ok=True)
