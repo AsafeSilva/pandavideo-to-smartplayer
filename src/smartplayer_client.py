@@ -86,7 +86,7 @@ class SmartPlayerClient:
         )
         r.raise_for_status()
         data = r.json()
-        access = data["access_token"]
+        access = r.headers["authorization"]
         ttl = int(data.get("expires_in", 3600))
         expires_at = (datetime.now(timezone.utc) + timedelta(seconds=ttl)).isoformat()
         # creator.code é o X-User-Code correto — vem sempre na resposta de auth
@@ -120,12 +120,9 @@ class SmartPlayerClient:
 
     async def _authed_headers(self) -> dict[str, str]:
         tok = await self.get_token()
-        # Usa o creator_code do cache (obtido na autenticação) como X-User-Code
-        cached = self._read_token_cache()
-        user_code = (cached or {}).get("creator_code") or self._user_code
         return {
             "Authorization": f"Bearer {tok}",
-            "X-User-Code": user_code,
+            "X-User-Code": self._user_code,
         }
 
     # -----------------------------------------------------------------------
@@ -147,6 +144,8 @@ class SmartPlayerClient:
         )
         r.raise_for_status()
         data = r.json()
+        if isinstance(data, list):
+            return data[0]["code"]
         return data["code"]
 
     # -----------------------------------------------------------------------
@@ -161,7 +160,7 @@ class SmartPlayerClient:
         external_id: str,
         total_size: int,
         public_media: bool = True,
-    ) -> str:
+    ) -> "SPMedia":
         headers = await self._authed_headers()
         headers["Content-Type"] = "application/json"
         payload = [{
@@ -178,9 +177,8 @@ class SmartPlayerClient:
         )
         r.raise_for_status()
         data = r.json()
-        if isinstance(data, list):
-            return data[0]["code"]
-        return data["code"]
+        raw = data[0] if isinstance(data, list) else data
+        return SPMedia.model_validate(raw)
 
     @_retry_http()
     async def get_upload_urls(self, media_code: str) -> dict[str, str]:

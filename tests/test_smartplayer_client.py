@@ -16,7 +16,8 @@ async def test_get_token_fetches_and_caches(httpx_mock: HTTPXMock, tmp_path: Pat
     httpx_mock.add_response(
         method="POST",
         url="https://services.scaleup.com.br/authentication/v1/oauth/token",
-        json={"access_token": "tok-123", "expires_in": 604800, "token_type": "Bearer"},
+        json={"access_token": "body-tok", "expires_in": 604800, "token_type": "Bearer"},
+        headers={"authorization": "jwt-from-header"},
     )
     cache = tmp_path / "token.json"
     async with SmartPlayerClient(
@@ -27,10 +28,10 @@ async def test_get_token_fetches_and_caches(httpx_mock: HTTPXMock, tmp_path: Pat
     ) as c:
         tok = await c.get_token()
 
-    assert tok == "tok-123"
+    assert tok == "jwt-from-header"
     assert cache.exists()
     payload = json.loads(cache.read_text(encoding="utf-8"))
-    assert payload["access_token"] == "tok-123"
+    assert payload["access_token"] == "jwt-from-header"
     assert "expires_at" in payload
 
 
@@ -65,7 +66,8 @@ async def test_get_token_refreshes_when_near_expiry(httpx_mock: HTTPXMock, tmp_p
     httpx_mock.add_response(
         method="POST",
         url="https://services.scaleup.com.br/authentication/v1/oauth/token",
-        json={"access_token": "new-tok", "expires_in": 604800, "token_type": "Bearer"},
+        json={"access_token": "body-new", "expires_in": 604800, "token_type": "Bearer"},
+        headers={"authorization": "new-tok"},
     )
 
     async with SmartPlayerClient(
