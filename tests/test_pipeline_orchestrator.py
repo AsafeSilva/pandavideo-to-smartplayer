@@ -102,3 +102,38 @@ def test_disk_used_gb_pasta_inexistente(tmp_path: Path):
     from src.pipeline import _disk_used_gb
     # glob numa pasta inexistente não lança exceção — retorna 0
     assert _disk_used_gb(tmp_path / "nao_existe") == 0.0
+
+
+@pytest.mark.asyncio
+async def test_disk_backpressure(tmp_path: Path, monkeypatch):
+    """Verifica que downloads pausam quando disco cheio e retomam após upload liberar espaço."""
+    monkeypatch.setenv("RETRY_FAST", "1")
+
+    m = Manifest.load(tmp_path / "m.json")
+    m.upsert_folder("F1", FolderEntry(panda_folder_id="f1"))
+    for i in range(2):
+        m.upsert_video(VideoEntry(
+            panda_id=f"dv{i}", panda_folder="F1", title=f"DT{i}", size_bytes=100,
+        ))
+    m.save()
+
+    # FakePanda.download_file escreve 100 bytes por vídeo.
+    # Limite = 50 bytes → após o 1º download (100 bytes no disco), o 2º deve esperar
+    # até que o upload do 1º delete o arquivo.
+    limit_gb = 50 / (1024 ** 3)
+
+    await run_pipeline(
+        panda=FakePanda(),
+        sp=FakeSP(),
+        manifest=m,
+        download_dir=tmp_path / "downloads",
+        max_download_concurrency=1,
+        max_upload_concurrency=1,
+        poll_interval=0,
+        max_disk_gb=limit_gb,
+    )
+
+    for i in range(2):
+        assert m.videos[f"dv{i}"].state == VideoState.DONE, f"dv{i} não chegou a DONE"
+    # Confirma que nenhum mp4 sobrou no disco
+    assert list((tmp_path / "downloads").glob("*.mp4")) == []

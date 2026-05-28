@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -212,6 +213,7 @@ async def run_pipeline(
     poll_interval: float = 30.0,
     quality: str = "original",
     limit: int | None = None,
+    max_disk_gb: float | None = None,
     dashboard: "LiveDashboard | None" = None,
 ) -> None:
     """Orquestra workers de download e upload via filas asyncio."""
@@ -245,6 +247,17 @@ async def run_pipeline(
             size_mb = v.size_bytes / (1024 ** 2) if v.size_bytes else 0
             if dashboard:
                 dashboard.on_download_start(vid, v.title or vid, size_mb)
+            if max_disk_gb is not None:
+                _poll = 0.01 if os.environ.get("RETRY_FAST") == "1" else 30.0
+                while _disk_used_gb(download_dir) >= max_disk_gb:
+                    if dashboard:
+                        dashboard.on_download_phase(vid, "ag. disco...")
+                    logger.info(
+                        "[disk] aguardando espaço — uso atual %.1f GB / %.0f GB",
+                        _disk_used_gb(download_dir),
+                        max_disk_gb,
+                    )
+                    await asyncio.sleep(_poll)
             try:
                 await download_one(panda, manifest, vid, download_dir, quality, poll_interval, dashboard=dashboard)
                 await to_upload.put(vid)
