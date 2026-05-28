@@ -138,14 +138,14 @@ async def test_create_media_returns_code(httpx_mock: HTTPXMock, tmp_path: Path):
         json=[{"code": "media-xyz", "status": "DRAFT"}],
     )
     async with SmartPlayerClient("cid", "csec", "uc", cache) as c:
-        code = await c.create_media(
+        media = await c.create_media(
             name="Aula 01",
             description="Intro",
             external_id="panda-v1",
             total_size=12345,
         )
 
-    assert code == "media-xyz"
+    assert media.code == "media-xyz"
     req = httpx_mock.get_request()
     body = json.loads(req.content)
     assert body == [{
@@ -220,3 +220,29 @@ async def test_poll_status(httpx_mock: HTTPXMock, tmp_path: Path):
 def test_embed_url():
     from src.smartplayer_client import build_embed_url
     assert build_embed_url("abc123") == "https://player.scaleup.com.br/embed/abc123"
+
+
+# ---------------------------------------------------------------------------
+# Task 10 — move_media
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_move_media(httpx_mock: HTTPXMock, tmp_path: Path):
+    cache = _stub_token_cache(tmp_path)
+    httpx_mock.add_response(
+        method="PUT",
+        url="https://services.scaleup.com.br/backoffice/v1/folders/moves",
+        status_code=200,
+        json={},
+    )
+    async with SmartPlayerClient("cid", "csec", "uc", cache) as c:
+        await c.move_media("folder-abc", ["media-1", "media-2"])
+
+    req = httpx_mock.get_request(method="PUT")
+    assert req.headers["Authorization"] == "Bearer tok"
+    body = json.loads(req.content)
+    assert body == {
+        "toFolderCode": "folder-abc",
+        "mediaCodes": ["media-1", "media-2"],
+        "folderCodes": [],
+    }

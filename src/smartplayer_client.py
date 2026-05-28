@@ -224,6 +224,17 @@ class SmartPlayerClient:
         r.raise_for_status()
         return r.json().get("status", "UNKNOWN")
 
+    @_retry_http()
+    async def move_media(self, folder_code: str, media_codes: list[str]) -> None:
+        headers = await self._authed_headers()
+        headers["Content-Type"] = "application/json"
+        r = await self._client.put(
+            f"{self._base_url}/folders/moves",
+            headers=headers,
+            json={"toFolderCode": folder_code, "mediaCodes": media_codes, "folderCodes": []},
+        )
+        r.raise_for_status()
+
 
 def build_embed_url(media_code: str) -> str:
     return SP_EMBED_URL_TEMPLATE.format(code=media_code)
