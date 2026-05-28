@@ -71,6 +71,5 @@ git commit -m "tipo: descrição"
 
 ## Known Gaps
 
-- `MAX_DISK_USAGE_GB` in `.env` is not enforced — check disk space manually before `run`
 - Thumbnail download is not implemented (SmartPlayer auto-generates from video frames)
 - `--resume` flag exists but is a no-op (manifest always resumes automatically)

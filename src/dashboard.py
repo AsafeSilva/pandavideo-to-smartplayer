@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 _PHASE_ICON = {
     "requisitando": "[cyan]↺[/]",
     "ag. Panda...": "[yellow]⌛[/]",
+    "ag. disco...": "[yellow]💾[/]",
     "baixando...": "[cyan]⬇[/]",
     "concluído": "[green]✓[/]",
     "criando media": "[cyan]↺[/]",

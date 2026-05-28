@@ -130,6 +130,7 @@ async def cmd_run(
                 max_upload_concurrency=settings.max_upload_concurrency,
                 quality=settings.panda_quality,
                 limit=limit,
+                max_disk_gb=settings.max_disk_usage_gb or None,
                 dashboard=dashboard,
             )
 
@@ -171,6 +172,7 @@ async def cmd_retry_failed(
                 max_download_concurrency=settings.max_download_concurrency,
                 max_upload_concurrency=settings.max_upload_concurrency,
                 quality=settings.panda_quality,
+                max_disk_gb=settings.max_disk_usage_gb or None,
                 dashboard=dashboard,
             )
 
