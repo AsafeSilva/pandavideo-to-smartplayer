@@ -61,10 +61,10 @@ Commands `export` and `cleanup` work without credentials. All others require `.e
 
 ## Workflow de desenvolvimento
 
-Ao finalizar qualquer alteração no código, sempre commitar antes de encerrar a sessão:
+Ao finalizar qualquer alteração no código, rodar os testes e perguntar ao usuário se deseja commitar antes de encerrar a sessão. Nunca commitar ou fazer push sem confirmação explícita — o usuário pode querer fazer testes adicionais ou ajustes antes.
 
 ```powershell
-pytest -v                        # garantir que os testes passam
+pytest -v                        # rodar antes de propor o commit
 git add <arquivos alterados>
 git commit -m "tipo: descrição"
 ```
