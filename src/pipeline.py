@@ -4,10 +4,14 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.manifest import Manifest
 from src.models import FolderEntry, VideoState
 from src.smartplayer_client import build_embed_url
+
+if TYPE_CHECKING:
+    from src.dashboard import LiveDashboard
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +24,11 @@ async def download_one(
     quality: str = "original",
     poll_interval: float = 30.0,
     poll_timeout: float = 60 * 60,
+    dashboard: "LiveDashboard | None" = None,
 ) -> None:
     """Executa o sub-pipeline de download para um único vídeo, atualizando o manifest."""
     v = manifest.videos[video_id]
+    title = v.title or video_id
 
     # O endpoint download-async usa o video_external_id (Bunny CDN), não o panda_id
     if not v.panda_external_id:
@@ -32,10 +38,17 @@ async def download_one(
     dl_id = v.panda_external_id or video_id
 
     if v.state == VideoState.PENDING:
+        size_mb = v.size_bytes / (1024 ** 2) if v.size_bytes else 0
+        logger.info("[download] requisitando: %s (%.0f MB)", title, size_mb)
+        if dashboard:
+            dashboard.on_download_phase(video_id, "requisitando")
         await panda.request_download(dl_id, quality, v.title)
         manifest.transition(video_id, VideoState.DOWNLOAD_REQUESTED)
 
     if v.state in (VideoState.DOWNLOAD_REQUESTED, VideoState.DOWNLOAD_READY):
+        logger.info("[download] aguardando Panda processar: %s", title)
+        if dashboard:
+            dashboard.on_download_phase(video_id, "ag. Panda...")
         elapsed = 0.0
         url: str | None = None
         while elapsed < poll_timeout:
@@ -44,16 +57,24 @@ async def download_one(
                 break
             await asyncio.sleep(poll_interval)
             elapsed += poll_interval
+            if elapsed % 300 < poll_interval:
+                logger.info("[download] ainda aguardando Panda: %s (%.0fs)", title, elapsed)
         if not url:
             raise TimeoutError(f"poll_download timeout para {video_id}")
         manifest.transition(video_id, VideoState.DOWNLOAD_READY)
         download_dir.mkdir(parents=True, exist_ok=True)
         dest = download_dir / f"{video_id}.mp4"
+        logger.info("[download] baixando arquivo: %s → %s", title, dest.name)
+        if dashboard:
+            dashboard.on_download_phase(video_id, "baixando...")
         await panda.download_file(url, dest)
         manifest.transition(
             video_id, VideoState.DOWNLOADED,
             local_video_path=str(dest),
         )
+        logger.info("[download] concluído: %s", title)
+        if dashboard:
+            dashboard.on_download_phase(video_id, "concluído")
 
 
 SP_TERMINAL_STATUSES = {"COMPLETED"}
@@ -67,12 +88,18 @@ async def upload_one(
     poll_interval: float = 60.0,
     poll_timeout: float = 2 * 60 * 60,
     cleanup: bool = True,
+    dashboard: "LiveDashboard | None" = None,
 ) -> None:
     """Sub-pipeline: vídeo no disco -> media SP -> upload -> encoding -> DONE."""
     v = manifest.videos[video_id]
+    title = v.title or video_id
 
     if v.state == VideoState.DOWNLOADED:
         display_title = v.title
+        size_mb = v.size_bytes / (1024 ** 2) if v.size_bytes else 0
+        logger.info("[upload] criando media SP: %s (%.0f MB)", display_title, size_mb)
+        if dashboard:
+            dashboard.on_upload_phase(video_id, "criando media")
         media = await sp.create_media(
             name=display_title,
             description=v.description,
@@ -83,6 +110,9 @@ async def upload_one(
         # urlsUpload só vem na criação — faz upload imediatamente
         urls = media.urlsUpload or {}
         if urls.get("urlUploadVideo"):
+            logger.info("[upload] enviando para SP: %s", title)
+            if dashboard:
+                dashboard.on_upload_phase(video_id, "enviando")
             await sp.upload_binary(urls["urlUploadVideo"], v.local_video_path, "video/mp4")
             if v.local_thumb_path and urls.get("urlUploadPoster"):
                 await sp.upload_binary(urls["urlUploadPoster"], v.local_thumb_path, "image/jpeg")
@@ -93,6 +123,9 @@ async def upload_one(
     if v.state in (VideoState.SP_MEDIA_CREATED, VideoState.SP_UPLOAD_URLS_READY):
         urls = await sp.get_upload_urls(v.sp_media_code)
         if urls.get("urlUploadVideo"):
+            logger.info("[upload] enviando para SP (retomada): %s", title)
+            if dashboard:
+                dashboard.on_upload_phase(video_id, "enviando")
             await sp.upload_binary(urls["urlUploadVideo"], v.local_video_path, "video/mp4")
             if v.local_thumb_path and urls.get("urlUploadPoster"):
                 await sp.upload_binary(urls["urlUploadPoster"], v.local_thumb_path, "image/jpeg")
@@ -100,6 +133,9 @@ async def upload_one(
             manifest.transition(video_id, VideoState.SP_PROCESSING)
 
     if v.state == VideoState.SP_PROCESSING:
+        logger.info("[upload] aguardando encoding SP: %s", title)
+        if dashboard:
+            dashboard.on_upload_phase(video_id, "encoding...")
         elapsed = 0.0
         status = None
         while elapsed < poll_timeout:
@@ -110,6 +146,8 @@ async def upload_one(
                 raise RuntimeError(f"SP retornou ERROR para {video_id}")
             await asyncio.sleep(poll_interval)
             elapsed += poll_interval
+            if elapsed % 300 < poll_interval:
+                logger.info("[upload] encoding em andamento: %s status=%s (%.0fs)", title, status, elapsed)
         if status not in SP_TERMINAL_STATUSES:
             raise TimeoutError(f"poll_status timeout para {video_id}")
         manifest.transition(
@@ -131,6 +169,9 @@ async def upload_one(
             if v.local_thumb_path:
                 Path(v.local_thumb_path).unlink(missing_ok=True)
         manifest.transition(video_id, VideoState.DONE)
+        logger.info("[DONE] %s", title)
+        if dashboard:
+            dashboard.on_upload_phase(video_id, "DONE")
 
 
 async def _ensure_sp_folder(sp, manifest: Manifest, folder_name: str) -> str:
@@ -165,6 +206,7 @@ async def run_pipeline(
     poll_interval: float = 30.0,
     quality: str = "original",
     limit: int | None = None,
+    dashboard: "LiveDashboard | None" = None,
 ) -> None:
     """Orquestra workers de download e upload via filas asyncio."""
     # Filas
@@ -193,13 +235,19 @@ async def run_pipeline(
             if vid == sentinel:
                 to_download.task_done()
                 return
+            v = manifest.videos[vid]
+            size_mb = v.size_bytes / (1024 ** 2) if v.size_bytes else 0
+            if dashboard:
+                dashboard.on_download_start(vid, v.title or vid, size_mb)
             try:
-                await download_one(panda, manifest, vid, download_dir, quality, poll_interval)
+                await download_one(panda, manifest, vid, download_dir, quality, poll_interval, dashboard=dashboard)
                 await to_upload.put(vid)
             except Exception as e:
                 manifest.mark_failed(vid, f"download: {e!r}")
                 logger.exception("download falhou para %s", vid)
             finally:
+                if dashboard:
+                    dashboard.on_download_done(vid)
                 to_download.task_done()
 
     async def upload_worker():
@@ -208,25 +256,60 @@ async def run_pipeline(
             if vid == sentinel:
                 to_upload.task_done()
                 return
+            v = manifest.videos[vid]
+            if dashboard:
+                dashboard.on_upload_start(vid, v.title or vid)
             try:
-                await upload_one(sp, manifest, vid, poll_interval)
+                await upload_one(sp, manifest, vid, poll_interval, dashboard=dashboard)
             except Exception as e:
                 manifest.mark_failed(vid, f"upload: {e!r}")
                 logger.exception("upload falhou para %s", vid)
             finally:
+                if dashboard:
+                    dashboard.on_upload_done(vid)
                 to_upload.task_done()
 
-    downloaders = [asyncio.create_task(download_worker()) for _ in range(max_download_concurrency)]
-    uploaders = [asyncio.create_task(upload_worker()) for _ in range(max_upload_concurrency)]
+    total = len(manifest.videos)
+    logger.info(
+        "[pipeline] iniciando — %d vídeos na fila de download, %d retomando upload",
+        to_download.qsize(), to_upload.qsize(),
+    )
 
-    # Aguarda fila de download esvaziar e sinaliza downloaders
-    await to_download.join()
-    for _ in downloaders:
-        await to_download.put(sentinel)
-    await asyncio.gather(*downloaders)
+    def _log_progress() -> None:
+        counts: dict[str, int] = {}
+        for v in manifest.videos.values():
+            counts[v.state.value] = counts.get(v.state.value, 0) + 1
+        done = counts.get("DONE", 0)
+        failed = counts.get("FAILED", 0)
+        in_progress = {k: n for k, n in counts.items() if k not in ("DONE", "FAILED")}
+        parts = ", ".join(f"{k}:{n}" for k, n in sorted(in_progress.items()))
+        logger.info("[progresso] %d/%d concluídos, %d falhas — %s", done, total, failed, parts or "nenhum em andamento")
 
-    # Aguarda fila de upload esvaziar e sinaliza uploaders
-    await to_upload.join()
-    for _ in uploaders:
-        await to_upload.put(sentinel)
-    await asyncio.gather(*uploaders)
+    async def progress_reporter() -> None:
+        while True:
+            await asyncio.sleep(60)
+            _log_progress()
+
+    reporter = asyncio.create_task(progress_reporter())
+
+    try:
+        downloaders = [asyncio.create_task(download_worker()) for _ in range(max_download_concurrency)]
+        uploaders = [asyncio.create_task(upload_worker()) for _ in range(max_upload_concurrency)]
+
+        # Aguarda fila de download esvaziar e sinaliza downloaders
+        await to_download.join()
+        for _ in downloaders:
+            await to_download.put(sentinel)
+        await asyncio.gather(*downloaders)
+
+        # Aguarda fila de upload esvaziar e sinaliza uploaders
+        await to_upload.join()
+        for _ in uploaders:
+            await to_upload.put(sentinel)
+        await asyncio.gather(*uploaders)
+    finally:
+        reporter.cancel()
+        await asyncio.gather(reporter, return_exceptions=True)
+
+    _log_progress()
+    logger.info("[pipeline] finalizado")

@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from src.config import Settings
+from src.dashboard import LiveDashboard
 from src.discovery import discover
 from src.exporter import export_csv, export_markdown
 from src.manifest import Manifest
@@ -119,16 +120,18 @@ async def cmd_run(
                    token_cache_path=token_cache,
                ) as sp:
         limit = getattr(args, "limit", None)
-        await run_pipeline(
-            panda=panda,
-            sp=sp,
-            manifest=manifest,
-            download_dir=download_dir,
-            max_download_concurrency=settings.max_download_concurrency,
-            max_upload_concurrency=settings.max_upload_concurrency,
-            quality=settings.panda_quality,
-            limit=limit,
-        )
+        with LiveDashboard(manifest, settings.max_download_concurrency, settings.max_upload_concurrency) as dashboard:
+            await run_pipeline(
+                panda=panda,
+                sp=sp,
+                manifest=manifest,
+                download_dir=download_dir,
+                max_download_concurrency=settings.max_download_concurrency,
+                max_upload_concurrency=settings.max_upload_concurrency,
+                quality=settings.panda_quality,
+                limit=limit,
+                dashboard=dashboard,
+            )
 
     export_markdown(manifest, DEFAULT_LOG_MD)
     export_csv(manifest, DEFAULT_LOG_CSV)
@@ -162,12 +165,14 @@ async def cmd_retry_failed(
                    user_code=settings.sp_user_code,
                    token_cache_path=token_cache,
                ) as sp:
-        await run_pipeline(
-            panda=panda, sp=sp, manifest=manifest, download_dir=download_dir,
-            max_download_concurrency=settings.max_download_concurrency,
-            max_upload_concurrency=settings.max_upload_concurrency,
-            quality=settings.panda_quality,
-        )
+        with LiveDashboard(manifest, settings.max_download_concurrency, settings.max_upload_concurrency) as dashboard:
+            await run_pipeline(
+                panda=panda, sp=sp, manifest=manifest, download_dir=download_dir,
+                max_download_concurrency=settings.max_download_concurrency,
+                max_upload_concurrency=settings.max_upload_concurrency,
+                quality=settings.panda_quality,
+                dashboard=dashboard,
+            )
 
 
 def cmd_export(

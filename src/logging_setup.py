@@ -47,3 +47,7 @@ def configure_logging(log_path: Path, level: str = "INFO") -> None:
     root.handlers.clear()
     root.addHandler(fh)
     root.addHandler(sh)
+
+    # HTTP requests são ruidosos no console; mantém no arquivo para debug
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
