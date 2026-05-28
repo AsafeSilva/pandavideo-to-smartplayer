@@ -14,6 +14,11 @@ class FakePanda:
         self.requested = []
         self.poll_calls = 0
 
+    async def get_video(self, video_id):
+        class _V:
+            video_external_id = video_id
+        return _V()
+
     async def request_download(self, video_id, quality, title):
         self.requested.append((video_id, quality, title))
 
