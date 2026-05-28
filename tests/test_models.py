@@ -19,6 +19,10 @@ def test_video_state_transitions_listed():
     assert VideoState.FAILED.value == "failed"
 
 
+def test_sp_moved_state_exists():
+    assert VideoState.SP_MOVED.value == "sp_moved"
+
+
 def test_folder_entry_minimal():
     f = FolderEntry(panda_folder_id="uuid-1", sp_folder_code=None)
     assert f.panda_folder_id == "uuid-1"
