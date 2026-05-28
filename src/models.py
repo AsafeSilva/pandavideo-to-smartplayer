@@ -37,6 +37,7 @@ class VideoEntry:
     panda_folder: str
     title: str
     description: str = ""
+    panda_external_id: Optional[str] = None
     thumbnail_url: Optional[str] = None
     duration_sec: int = 0
     size_bytes: int = 0

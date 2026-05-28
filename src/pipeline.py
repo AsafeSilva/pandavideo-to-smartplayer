@@ -24,15 +24,22 @@ async def download_one(
     """Executa o sub-pipeline de download para um único vídeo, atualizando o manifest."""
     v = manifest.videos[video_id]
 
+    # O endpoint download-async usa o video_external_id (Bunny CDN), não o panda_id
+    if not v.panda_external_id:
+        pv = await panda.get_video(video_id)
+        manifest.transition(video_id, v.state, panda_external_id=pv.video_external_id)
+        v = manifest.videos[video_id]
+    dl_id = v.panda_external_id or video_id
+
     if v.state == VideoState.PENDING:
-        await panda.request_download(video_id, quality, v.title)
+        await panda.request_download(dl_id, quality, v.title)
         manifest.transition(video_id, VideoState.DOWNLOAD_REQUESTED)
 
     if v.state in (VideoState.DOWNLOAD_REQUESTED, VideoState.DOWNLOAD_READY):
         elapsed = 0.0
         url: str | None = None
         while elapsed < poll_timeout:
-            url = await panda.poll_download(video_id, quality)
+            url = await panda.poll_download(dl_id, quality)
             if url:
                 break
             await asyncio.sleep(poll_interval)
@@ -70,24 +77,31 @@ async def upload_one(
             # Usa caminho completo sem o prefixo "EDUCACIONAL | " (comum a todas as pastas)
             folder_path = v.panda_folder.split(" | ", 1)[-1]  # "Aceleração de Agências / Editadas"
             display_title = f"[{folder_path}] {v.title}"
-        code = await sp.create_media(
+        media = await sp.create_media(
             name=display_title,
             description=v.description,
             external_id=v.panda_id,
             total_size=v.size_bytes,
         )
-        manifest.transition(video_id, VideoState.SP_MEDIA_CREATED, sp_media_code=code)
+        manifest.transition(video_id, VideoState.SP_MEDIA_CREATED, sp_media_code=media.code)
+        # urlsUpload só vem na criação — faz upload imediatamente
+        urls = media.urlsUpload or {}
+        if urls.get("urlUploadVideo"):
+            await sp.upload_binary(urls["urlUploadVideo"], v.local_video_path, "video/mp4")
+            if v.local_thumb_path and urls.get("urlUploadPoster"):
+                await sp.upload_binary(urls["urlUploadPoster"], v.local_thumb_path, "image/jpeg")
+            manifest.transition(video_id, VideoState.UPLOADING)
+            manifest.transition(video_id, VideoState.SP_PROCESSING)
 
-    if v.state == VideoState.SP_MEDIA_CREATED:
-        manifest.transition(video_id, VideoState.SP_UPLOAD_URLS_READY)
-
-    if v.state == VideoState.SP_UPLOAD_URLS_READY:
+    # Fallback: se retomar de SP_MEDIA_CREATED ou SP_UPLOAD_URLS_READY sem URL salva
+    if v.state in (VideoState.SP_MEDIA_CREATED, VideoState.SP_UPLOAD_URLS_READY):
         urls = await sp.get_upload_urls(v.sp_media_code)
-        await sp.upload_binary(urls["urlUploadVideo"], v.local_video_path, "video/mp4")
-        if v.local_thumb_path:
-            await sp.upload_binary(urls["urlUploadPoster"], v.local_thumb_path, "image/jpeg")
-        manifest.transition(video_id, VideoState.UPLOADING)
-        manifest.transition(video_id, VideoState.SP_PROCESSING)
+        if urls.get("urlUploadVideo"):
+            await sp.upload_binary(urls["urlUploadVideo"], v.local_video_path, "video/mp4")
+            if v.local_thumb_path and urls.get("urlUploadPoster"):
+                await sp.upload_binary(urls["urlUploadPoster"], v.local_thumb_path, "image/jpeg")
+            manifest.transition(video_id, VideoState.UPLOADING)
+            manifest.transition(video_id, VideoState.SP_PROCESSING)
 
     if v.state == VideoState.SP_PROCESSING:
         elapsed = 0.0

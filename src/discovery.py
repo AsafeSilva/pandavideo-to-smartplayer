@@ -18,9 +18,10 @@ async def _collect_videos(panda, manifest: Manifest, folder_id: str, folder_labe
             continue
         manifest.upsert_video(VideoEntry(
             panda_id=v.id,
+            panda_external_id=v.video_external_id,
             panda_folder=folder_label,
             title=v.title,
-            description=v.description,
+            description=v.description or "",
             thumbnail_url=v.thumbnail,
             duration_sec=int(v.length),
             size_bytes=int(v.storage_size or v.size or 0),

@@ -42,7 +42,7 @@ class PandaVideo(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
     title: str
-    description: str = ""
+    description: Optional[str] = None
     folder_id: Optional[str] = None
     thumbnail: Optional[str] = None
     length: float = 0
@@ -51,6 +51,7 @@ class PandaVideo(BaseModel):
     tags: list[str] = Field(default_factory=list)
     status: str = "unknown"
     created_at: Optional[str] = None
+    video_external_id: Optional[str] = None
 
 
 class PandaClient:
@@ -147,6 +148,12 @@ class PandaClient:
         if r.status_code == 400:
             return None
         r.raise_for_status()
+
+    @_retry_http()
+    async def get_video(self, video_id: str) -> PandaVideo:
+        r = await self._client.get(f"{self._base_url}/videos/{video_id}")
+        r.raise_for_status()
+        return PandaVideo.model_validate(r.json())
 
     # ------------------------------------------------------------------
     # Task 6 — download_file em streaming
