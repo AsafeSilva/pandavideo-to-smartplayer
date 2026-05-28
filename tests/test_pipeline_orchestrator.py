@@ -27,6 +27,23 @@ class FakePanda:
         return 100
 
 
+class FakePandaDiskCheck(FakePanda):
+    """FakePanda que verifica que o disco está abaixo do limite no início de cada download."""
+    def __init__(self, download_dir: Path, limit_gb: float):
+        self._dl_dir = download_dir
+        self._limit_gb = limit_gb
+
+    async def download_file(self, url, dest):
+        from src.pipeline import _disk_used_gb
+        used = _disk_used_gb(self._dl_dir)
+        assert used < self._limit_gb, (
+            f"download iniciou com disco acima do limite: {used:.2e} GB >= {self._limit_gb:.2e} GB"
+        )
+        Path(dest).parent.mkdir(parents=True, exist_ok=True)
+        Path(dest).write_bytes(b"x" * 100)
+        return 100
+
+
 class FakeSP:
     async def create_folder(self, name, parent_code=None):
         return f"sp-{name[:3]}"
@@ -123,7 +140,7 @@ async def test_disk_backpressure(tmp_path: Path, monkeypatch):
     limit_gb = 50 / (1024 ** 3)
 
     await run_pipeline(
-        panda=FakePanda(),
+        panda=FakePandaDiskCheck(tmp_path / "downloads", limit_gb),
         sp=FakeSP(),
         manifest=m,
         download_dir=tmp_path / "downloads",
