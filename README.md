@@ -19,22 +19,28 @@ copy .env.example .env
 ## Uso
 
 ```powershell
-# 1. Descoberta (popula data/manifest.json)
-python -m src.migrate discover --prefix "EDUCACIONAL |"
+# 1. Ver pastas disponíveis no Panda (opcional — para copiar nomes exatos)
+python -m src.migrate list-folders
 
-# 2. Conferir o plano antes de baixar nada
+# 2. Descoberta (popula data/manifest.json)
+# Por prefixo de nome:
+python -m src.migrate discover --prefix "EDUCACIONAL |"
+# Ou por nomes exatos de pastas:
+python -m src.migrate discover --folder-names "Pasta A" "Pasta B"
+
+# 3. Conferir o plano antes de baixar nada
 python -m src.migrate run --dry-run
 
-# 3. Executar migração
+# 4. Executar migração
 python -m src.migrate run
 
-# 4. Em caso de falhas, reprocessar os que falharam
+# 5. Em caso de falhas, reprocessar os que falharam
 python -m src.migrate retry-failed
 
-# 5. Gerar logs tabelados a qualquer momento
+# 6. Gerar logs tabelados a qualquer momento
 python -m src.migrate export
 
-# 6. Limpar MP4s locais de vídeos já concluídos
+# 7. Limpar MP4s locais de vídeos já concluídos
 python -m src.migrate cleanup
 ```
 
