@@ -19,7 +19,9 @@ copy .env.example .env   # then fill in credentials
 pytest -v
 
 # Migration workflow
-python -m src.migrate discover --prefix "EDUCACIONAL |"
+python -m src.migrate list-folders                                        # lista pastas disponíveis no Panda
+python -m src.migrate discover --prefix "EDUCACIONAL |"                  # descobre por prefixo
+python -m src.migrate discover --folder-names "Pasta A" "Pasta B"        # descobre por nome exato
 python -m src.migrate run --dry-run
 python -m src.migrate run
 python -m src.migrate retry-failed
@@ -56,6 +58,16 @@ Six focused modules under `src/`:
 See `.env.example`. Required: `PANDA_API_KEY`, `SMARTPLAYER_CLIENT_ID`, `SMARTPLAYER_CLIENT_SECRET`, `SMARTPLAYER_USER_CODE`.
 
 Commands `export` and `cleanup` work without credentials. All others require `.env`.
+
+## Workflow de desenvolvimento
+
+Ao finalizar qualquer alteração no código, sempre commitar antes de encerrar a sessão:
+
+```powershell
+pytest -v                        # garantir que os testes passam
+git add <arquivos alterados>
+git commit -m "tipo: descrição"
+```
 
 ## Known Gaps
 
