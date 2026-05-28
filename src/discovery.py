@@ -1,10 +1,13 @@
 """Discovery: lista pastas/vídeos do Panda e popula o manifest."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from src.manifest import Manifest
 from src.models import FolderEntry, VideoEntry, VideoState
+
+logger = logging.getLogger(__name__)
 
 
 async def _collect_videos(panda, manifest: Manifest, folder_id: str, folder_label: str) -> int:
@@ -48,10 +51,32 @@ async def _collect_videos(panda, manifest: Manifest, folder_id: str, folder_labe
     return count
 
 
-async def discover(panda, manifest: Manifest, prefix: str) -> None:
-    """Popula `manifest` com pastas que comecem com `prefix` e seus vídeos CONVERTED."""
+async def discover(
+    panda,
+    manifest: Manifest,
+    prefix: str,
+    folder_names: list[str] | None = None,
+) -> None:
+    """Popula `manifest` com pastas e seus vídeos CONVERTED.
+
+    Se `folder_names` for fornecido, seleciona apenas pastas com nomes exatos dessa lista
+    (case-sensitive) e ignora `prefix`. Caso algum nome não seja encontrado, emite aviso.
+    Se `folder_names` for None, filtra pelo `prefix` (comportamento padrão).
+    """
     folders = await panda.list_folders()
-    selected = [f for f in folders if f.name.startswith(prefix)]
+    if folder_names is not None:
+        folder_map = {f.name: f for f in folders}
+        selected = []
+        for name in folder_names:
+            if name in folder_map:
+                selected.append(folder_map[name])
+            else:
+                logger.warning(
+                    "Pasta não encontrada no Panda: %r — verifique o nome exato com list-folders",
+                    name,
+                )
+    else:
+        selected = [f for f in folders if f.name.startswith(prefix)]
     manifest.discovered_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     for folder in selected:

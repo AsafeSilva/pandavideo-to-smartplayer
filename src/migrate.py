@@ -28,8 +28,17 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="migrate", description="Panda Video -> SmartPlayer")
     sub = p.add_subparsers(dest="command", required=True)
 
+    sub.add_parser("list-folders", help="Exibe todas as pastas disponíveis no Panda (ID e nome)")
+
     pd = sub.add_parser("discover", help="Lista pastas/vídeos do Panda e popula manifest")
     pd.add_argument("--prefix", default="EDUCACIONAL |")
+    pd.add_argument(
+        "--folder-names",
+        nargs="+",
+        metavar="NOME",
+        default=None,
+        help="Nomes exatos das pastas a descobrir (ignora --prefix quando informado)",
+    )
 
     pr = sub.add_parser("run", help="Executa pipeline de migração")
     pr.add_argument("--dry-run", action="store_true")
@@ -43,11 +52,26 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+async def cmd_list_folders(manifest_path: Path = DEFAULT_MANIFEST) -> None:
+    settings = Settings.from_env()
+    async with PandaClient(api_key=settings.panda_api_key) as panda:
+        folders = await panda.list_folders()
+    if not folders:
+        print("Nenhuma pasta encontrada.")
+        return
+    col_width = max(len(f.name) for f in folders)
+    print(f"{'NOME':<{col_width}}  ID")
+    print("-" * (col_width + 2 + 36))
+    for f in sorted(folders, key=lambda x: x.name):
+        print(f"{f.name:<{col_width}}  {f.id}")
+
+
 async def cmd_discover(args, manifest_path: Path = DEFAULT_MANIFEST) -> None:
     settings = Settings.from_env()
     manifest = Manifest.load(manifest_path)
+    folder_names = getattr(args, "folder_names", None)
     async with PandaClient(api_key=settings.panda_api_key) as panda:
-        await discover(panda, manifest, prefix=args.prefix)
+        await discover(panda, manifest, prefix=args.prefix, folder_names=folder_names)
     print(f"Discovery completa. {len(manifest.videos)} vídeos em {len(manifest.folders)} pastas.")
 
 
@@ -194,6 +218,9 @@ def main(argv: list[str] | None = None) -> int:
     log_path = Path("logs") / f"migration_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     configure_logging(log_path, level=settings.log_level)
 
+    if args.command == "list-folders":
+        asyncio.run(cmd_list_folders())
+        return 0
     if args.command == "discover":
         asyncio.run(cmd_discover(args))
         return 0
