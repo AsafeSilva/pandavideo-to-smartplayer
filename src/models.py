@@ -16,6 +16,7 @@ class VideoState(str, Enum):
     SP_UPLOAD_URLS_READY = "sp_upload_urls_ready"
     UPLOADING = "uploading"
     SP_PROCESSING = "sp_processing"
+    SP_PARTIAL = "sp_partial"
     SP_COMPLETED = "sp_completed"
     SP_MOVED = "sp_moved"
     DONE = "done"

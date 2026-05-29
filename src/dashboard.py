@@ -24,6 +24,7 @@ _PHASE_ICON = {
     "criando media": "[cyan]↺[/]",
     "enviando": "[cyan]↑[/]",
     "encoding...": "[yellow]⚙[/]",
+    "sp_partial": "[yellow]⏳[/]",
     "DONE": "[green]✓[/]",
 }
 

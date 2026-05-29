@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import httpx
+
 from src.manifest import Manifest
 from src.models import FolderEntry, VideoState
 from src.smartplayer_client import build_embed_url
@@ -143,6 +145,8 @@ async def upload_one(
         logger.info("[upload] aguardando encoding SP: %s", title)
         if dashboard:
             dashboard.on_upload_phase(video_id, "encoding...")
+        # Pre-cria pasta antes do loop para poder tentar move a cada ciclo
+        folder_code = await _ensure_sp_folder(sp, manifest, v.panda_folder)
         elapsed = 0.0
         status = None
         while elapsed < poll_timeout:
@@ -151,6 +155,26 @@ async def upload_one(
                 break
             if status in SP_ERROR_STATUSES:
                 raise RuntimeError(f"SP retornou ERROR para {video_id}")
+            # Tentativa otimista de move: se funcionar, libera o worker agora
+            try:
+                await sp.move_media(folder_code, [v.sp_media_code])
+                logger.info("[upload] move antecipado OK — worker liberado: %s", title)
+                if cleanup and v.local_video_path:
+                    try:
+                        Path(v.local_video_path).unlink(missing_ok=True)
+                    except OSError as e:
+                        logger.warning("cleanup antecipado falhou para %s: %s", video_id, e)
+                    if v.local_thumb_path:
+                        Path(v.local_thumb_path).unlink(missing_ok=True)
+                manifest.transition(
+                    video_id, VideoState.SP_PARTIAL,
+                    sp_embed_url=build_embed_url(v.sp_media_code),
+                )
+                if dashboard:
+                    dashboard.on_upload_phase(video_id, "sp_partial")
+                return  # worker liberado; finalizer cuida do resto
+            except (httpx.HTTPStatusError, httpx.TransportError):
+                pass  # ainda não pode mover, continua polling
             await asyncio.sleep(poll_interval)
             elapsed += poll_interval
             if elapsed % 300 < poll_interval:
@@ -203,6 +227,38 @@ async def _ensure_sp_folder(sp, manifest: Manifest, folder_name: str) -> str:
     return code
 
 
+async def background_finalizer(
+    sp,
+    manifest: Manifest,
+    finalizer_interval: float = 300.0,
+) -> None:
+    """Monitora vídeos SP_PARTIAL até COMPLETED → DONE ou ERROR → FAILED.
+
+    Deve ser chamado após os upload workers encerrarem, garantindo que o conjunto
+    de SP_PARTIAL está completo e sem race condition de escrita.
+    """
+    while True:
+        partial = manifest.videos_in_state(VideoState.SP_PARTIAL)
+        if not partial:
+            return
+        for v in partial:
+            try:
+                status = await sp.poll_status(v.sp_media_code)
+                if status in SP_TERMINAL_STATUSES:
+                    manifest.transition(v.panda_id, VideoState.DONE)
+                    logger.info("[finalizer] DONE: %s", v.title)
+                elif status in SP_ERROR_STATUSES:
+                    manifest.mark_failed(v.panda_id, "SP encoding ERROR após move antecipado")
+                    logger.error("[finalizer] FAILED: %s status=%s", v.title, status)
+                else:
+                    logger.debug("[finalizer] ainda em encoding: %s status=%s", v.title, status)
+            except Exception as e:
+                logger.warning("[finalizer] erro transitório para %s: %s", v.panda_id, e)
+        if not manifest.videos_in_state(VideoState.SP_PARTIAL):
+            return
+        await asyncio.sleep(finalizer_interval)
+
+
 async def run_pipeline(
     panda,
     sp,
@@ -215,6 +271,7 @@ async def run_pipeline(
     limit: int | None = None,
     max_disk_gb: float | None = None,
     dashboard: "LiveDashboard | None" = None,
+    finalizer_interval: float = 300.0,
 ) -> None:
     """Orquestra workers de download e upload via filas asyncio."""
     # Filas
@@ -223,6 +280,7 @@ async def run_pipeline(
 
     # Popula com vídeos pendentes
     pre_download = (VideoState.PENDING, VideoState.DOWNLOAD_REQUESTED, VideoState.DOWNLOAD_READY)
+    # SP_PARTIAL excluído: gerenciado pelo background_finalizer, não pelos upload workers
     pre_upload = (VideoState.DOWNLOADED, VideoState.SP_MEDIA_CREATED,
                   VideoState.SP_UPLOAD_URLS_READY, VideoState.UPLOADING, VideoState.SP_PROCESSING,
                   VideoState.SP_COMPLETED, VideoState.SP_MOVED)
@@ -328,6 +386,9 @@ async def run_pipeline(
         for _ in uploaders:
             await to_upload.put(sentinel)
         await asyncio.gather(*uploaders)
+
+        # Após workers finalizarem, monitora SP_PARTIAL até todos chegarem a DONE/FAILED
+        await background_finalizer(sp, manifest, finalizer_interval)
     finally:
         reporter.cancel()
         await asyncio.gather(reporter, return_exceptions=True)
