@@ -6,7 +6,7 @@ import pytest
 
 from src.manifest import Manifest
 from src.models import FolderEntry, VideoEntry, VideoState
-from src.pipeline import upload_one
+from src.pipeline import run_pipeline, upload_one
 from src.smartplayer_client import SPMedia
 
 
@@ -139,6 +139,35 @@ async def test_move_always_fails_timeout(tmp_path: Path):
 
     with pytest.raises(TimeoutError):
         await upload_one(sp, m, "v1", poll_interval=0, poll_timeout=0, cleanup=True)
+
+
+@pytest.mark.asyncio
+async def test_upload_worker_failure_cleans_up_local_file(tmp_path: Path):
+    """Quando upload falha com exceção, o arquivo local deve ser deletado."""
+    m, video_path = _make_video(tmp_path)
+    assert video_path.exists()
+
+    class FakeSPUploadFails(FakeSP):
+        async def upload_binary(self, url, file_path, content_type):
+            raise RuntimeError("falha de rede simulada")
+
+    class FakePandaNoop:
+        async def request_download(self, video_id): pass
+        async def poll_download(self, video_id): return None
+        async def list_folders(self): return []
+        async def list_videos(self, folder_id): return []
+
+    await run_pipeline(
+        panda=FakePandaNoop(),
+        sp=FakeSPUploadFails(),
+        manifest=m,
+        download_dir=tmp_path / "downloads",
+        poll_interval=0,
+    )
+
+    v = m.videos["v1"]
+    assert v.state == VideoState.FAILED
+    assert not video_path.exists()
 
 
 @pytest.mark.asyncio

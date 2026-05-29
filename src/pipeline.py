@@ -343,6 +343,16 @@ async def run_pipeline(
             except Exception as e:
                 manifest.mark_failed(vid, f"upload: {e!r}")
                 logger.exception("upload falhou para %s", vid)
+                if v.local_video_path:
+                    try:
+                        Path(v.local_video_path).unlink(missing_ok=True)
+                    except OSError as ex:
+                        logger.warning("cleanup falhou após erro de upload para %s: %s", vid, ex)
+                if v.local_thumb_path:
+                    try:
+                        Path(v.local_thumb_path).unlink(missing_ok=True)
+                    except OSError as ex:
+                        logger.warning("cleanup thumb falhou após erro de upload para %s: %s", vid, ex)
             finally:
                 if dashboard:
                     dashboard.on_upload_done(vid)
