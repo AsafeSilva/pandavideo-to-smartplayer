@@ -231,16 +231,15 @@ async def background_finalizer(
     sp,
     manifest: Manifest,
     finalizer_interval: float = 300.0,
+    workers_done: "asyncio.Event | None" = None,
 ) -> None:
     """Monitora vídeos SP_PARTIAL até COMPLETED → DONE ou ERROR → FAILED.
 
-    Deve ser chamado após os upload workers encerrarem, garantindo que o conjunto
-    de SP_PARTIAL está completo e sem race condition de escrita.
+    Pode rodar concorrentemente com os upload workers. Só encerra quando não há
+    mais SP_PARTIAL e workers_done está sinalizado (ou workers_done=None).
     """
     while True:
         partial = manifest.videos_in_state(VideoState.SP_PARTIAL)
-        if not partial:
-            return
         for v in partial:
             try:
                 status = await sp.poll_status(v.sp_media_code)
@@ -255,7 +254,8 @@ async def background_finalizer(
             except Exception as e:
                 logger.warning("[finalizer] erro transitório para %s: %s", v.panda_id, e)
         if not manifest.videos_in_state(VideoState.SP_PARTIAL):
-            return
+            if workers_done is None or workers_done.is_set():
+                return
         await asyncio.sleep(finalizer_interval)
 
 
@@ -380,6 +380,10 @@ async def run_pipeline(
             _log_progress()
 
     reporter = asyncio.create_task(progress_reporter())
+    workers_done = asyncio.Event()
+    finalizer_task = asyncio.create_task(
+        background_finalizer(sp, manifest, finalizer_interval, workers_done)
+    )
 
     try:
         downloaders = [asyncio.create_task(download_worker()) for _ in range(max_download_concurrency)]
@@ -397,11 +401,13 @@ async def run_pipeline(
             await to_upload.put(sentinel)
         await asyncio.gather(*uploaders)
 
-        # Após workers finalizarem, monitora SP_PARTIAL até todos chegarem a DONE/FAILED
-        await background_finalizer(sp, manifest, finalizer_interval)
+        # Sinaliza finalizer que não virão mais SP_PARTIAL, aguarda dreno final
+        workers_done.set()
+        await finalizer_task
     finally:
         reporter.cancel()
-        await asyncio.gather(reporter, return_exceptions=True)
+        finalizer_task.cancel()
+        await asyncio.gather(reporter, finalizer_task, return_exceptions=True)
 
     _log_progress()
     logger.info("[pipeline] finalizado")
