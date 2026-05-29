@@ -1,16 +1,18 @@
 import pytest
+from pathlib import Path
 
 from src.config import Settings
 
 
-def test_settings_from_env(monkeypatch):
+def test_settings_from_env(monkeypatch, tmp_path):
     monkeypatch.setenv("PANDA_API_KEY", "panda-key")
     monkeypatch.setenv("SMARTPLAYER_CLIENT_ID", "cid")
     monkeypatch.setenv("SMARTPLAYER_CLIENT_SECRET", "csec")
     monkeypatch.setenv("SMARTPLAYER_USER_CODE", "uc")
     monkeypatch.setenv("MAX_DOWNLOAD_CONCURRENCY", "5")
 
-    s = Settings.from_env()
+    # Passa dotenv_path inexistente para evitar que load_dotenv() carregue o .env real
+    s = Settings.from_env(dotenv_path=tmp_path / "nonexistent.env")
     assert s.panda_api_key == "panda-key"
     assert s.sp_client_id == "cid"
     assert s.max_download_concurrency == 5
