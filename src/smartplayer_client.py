@@ -235,6 +235,16 @@ class SmartPlayerClient:
         )
         r.raise_for_status()
 
+    @_retry_http()
+    async def delete_media(self, media_code: str) -> None:
+        headers = await self._authed_headers()
+        r = await self._client.delete(
+            f"{self._base_url}/medias/{media_code}",
+            headers=headers,
+        )
+        if r.status_code != 404:
+            r.raise_for_status()
+
 
 def build_embed_url(media_code: str) -> str:
     return SP_EMBED_URL_TEMPLATE.format(code=media_code)

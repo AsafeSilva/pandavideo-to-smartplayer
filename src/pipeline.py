@@ -131,6 +131,21 @@ async def upload_one(
     # Fallback: se retomar de SP_MEDIA_CREATED ou SP_UPLOAD_URLS_READY sem URL salva
     if v.state in (VideoState.SP_MEDIA_CREATED, VideoState.SP_UPLOAD_URLS_READY):
         urls = await sp.get_upload_urls(v.sp_media_code)
+        if not urls.get("urlUploadVideo"):
+            # URL de upload é one-time (gerada só no POST); apagar e recriar para obter nova URL
+            logger.warning("[upload] URL de upload indisponível para %s — recriando media no SP", title)
+            if dashboard:
+                dashboard.on_upload_phase(video_id, "criando media")
+            await sp.delete_media(v.sp_media_code)
+            media = await sp.create_media(
+                name=v.title or title,
+                description=v.description,
+                external_id=v.panda_id,
+                total_size=v.size_bytes,
+            )
+            manifest.transition(video_id, VideoState.SP_MEDIA_CREATED, sp_media_code=media.code)
+            v = manifest.videos[video_id]
+            urls = media.urlsUpload or {}
         if urls.get("urlUploadVideo"):
             logger.info("[upload] enviando para SP (retomada): %s", title)
             if dashboard:
