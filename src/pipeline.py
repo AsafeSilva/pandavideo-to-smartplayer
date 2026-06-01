@@ -104,29 +104,38 @@ async def upload_one(
     title = v.title or video_id
 
     if v.state == VideoState.DOWNLOADED:
-        display_title = v.title
-        size_mb = v.size_bytes / (1024 ** 2) if v.size_bytes else 0
-        logger.info("[upload] criando media SP: %s (%.0f MB)", display_title, size_mb)
-        if dashboard:
-            dashboard.on_upload_phase(video_id, "criando media")
-        media = await sp.create_media(
-            name=display_title,
-            description=v.description,
-            external_id=v.panda_id,
-            total_size=v.size_bytes,
-        )
-        manifest.transition(video_id, VideoState.SP_MEDIA_CREATED, sp_media_code=media.code)
-        # urlsUpload só vem na criação — faz upload imediatamente
-        urls = media.urlsUpload or {}
-        if urls.get("urlUploadVideo"):
-            logger.info("[upload] enviando para SP: %s", title)
+        if v.sp_media_code:
+            # Media já foi criada no SP numa execução anterior — pular create_media para
+            # evitar 400 "externalId já existe"; reutilizar o código existente
+            logger.warning(
+                "[upload] media SP já existe para %s (%s) — retomando sem recriar",
+                title, v.sp_media_code,
+            )
+            manifest.transition(video_id, VideoState.SP_MEDIA_CREATED, sp_media_code=v.sp_media_code)
+        else:
+            display_title = v.title
+            size_mb = v.size_bytes / (1024 ** 2) if v.size_bytes else 0
+            logger.info("[upload] criando media SP: %s (%.0f MB)", display_title, size_mb)
             if dashboard:
-                dashboard.on_upload_phase(video_id, "enviando")
-            await sp.upload_binary(urls["urlUploadVideo"], v.local_video_path, "video/mp4")
-            if v.local_thumb_path and urls.get("urlUploadPoster"):
-                await sp.upload_binary(urls["urlUploadPoster"], v.local_thumb_path, "image/jpeg")
-            manifest.transition(video_id, VideoState.UPLOADING)
-            manifest.transition(video_id, VideoState.SP_PROCESSING)
+                dashboard.on_upload_phase(video_id, "criando media")
+            media = await sp.create_media(
+                name=display_title,
+                description=v.description,
+                external_id=v.panda_id,
+                total_size=v.size_bytes,
+            )
+            manifest.transition(video_id, VideoState.SP_MEDIA_CREATED, sp_media_code=media.code)
+            # urlsUpload só vem na criação — faz upload imediatamente
+            urls = media.urlsUpload or {}
+            if urls.get("urlUploadVideo"):
+                logger.info("[upload] enviando para SP: %s", title)
+                if dashboard:
+                    dashboard.on_upload_phase(video_id, "enviando")
+                await sp.upload_binary(urls["urlUploadVideo"], v.local_video_path, "video/mp4")
+                if v.local_thumb_path and urls.get("urlUploadPoster"):
+                    await sp.upload_binary(urls["urlUploadPoster"], v.local_thumb_path, "image/jpeg")
+                manifest.transition(video_id, VideoState.UPLOADING)
+                manifest.transition(video_id, VideoState.SP_PROCESSING)
 
     # Fallback: se retomar de SP_MEDIA_CREATED ou SP_UPLOAD_URLS_READY sem URL salva
     if v.state in (VideoState.SP_MEDIA_CREATED, VideoState.SP_UPLOAD_URLS_READY):
