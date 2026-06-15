@@ -82,7 +82,10 @@ Scripts utilitários e de diagnóstico ficam em `scripts/`. **Nunca criar script
 | `probe_sp_api.py` | Probe genérico da API do SmartPlayer |
 | `probe_encoding.py` | Diagnóstico de encoding: baixa vídeo do Panda, sobe pro SP e loga resposta completa |
 | `probe_sp_delete.py` | Deleta mídias no SP via API |
+| `probe_sp_failed.py` | Consulta status atual dos vídeos FAILED no SP (body JSON completo) |
 | `reset_failed.py` | Reseta vídeos failed no manifest |
+| `reset_failed_sp_cleanup.py` | Deleta mídias FAILED no SP e reseta manifest para PENDING |
+| `rediscover_folder.py` | Re-descobre vídeos de uma pasta pelo panda_folder_id |
 
 ## Known Gaps
 

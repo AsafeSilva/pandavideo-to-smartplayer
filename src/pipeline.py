@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,6 +18,31 @@ if TYPE_CHECKING:
     from src.dashboard import LiveDashboard
 
 logger = logging.getLogger(__name__)
+
+
+def _probe_audio_codec(path: Path) -> str:
+    """Retorna o codec de áudio do arquivo, ou '' se ffprobe não disponível."""
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-select_streams", "a:0",
+             "-show_entries", "stream=codec_name",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True, text=True, timeout=30,
+        )
+        return r.stdout.strip().lower()
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return ""
+
+
+def _convert_audio_to_aac(src: Path) -> Path:
+    """Converte áudio para AAC mantendo vídeo intacto. Retorna o novo path."""
+    dst = src.with_stem(src.stem + "_aac")
+    subprocess.run(
+        ["ffmpeg", "-i", str(src), "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
+         str(dst), "-y"],
+        capture_output=True, timeout=3600, check=True,
+    )
+    return dst
 
 
 def _disk_used_gb(download_dir: Path) -> float:
@@ -77,6 +103,15 @@ async def download_one(
         if dashboard:
             dashboard.on_download_phase(video_id, "baixando...")
         await panda.download_file(url, dest)
+        audio_codec = _probe_audio_codec(dest)
+        if audio_codec and audio_codec != "aac":
+            logger.info("[download] áudio %s detectado — convertendo para AAC: %s", audio_codec, title)
+            if dashboard:
+                dashboard.on_download_phase(video_id, "convertendo áudio...")
+            converted = _convert_audio_to_aac(dest)
+            dest.unlink(missing_ok=True)
+            dest = converted
+            logger.info("[download] conversão AAC concluída: %s", title)
         manifest.transition(
             video_id, VideoState.DOWNLOADED,
             local_video_path=str(dest),
