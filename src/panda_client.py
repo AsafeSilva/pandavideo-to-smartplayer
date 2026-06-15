@@ -6,11 +6,29 @@ from pathlib import Path
 from typing import Optional
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from tenacity import (
     retry, stop_after_attempt, wait_exponential,
     retry_if_exception_type,
 )
+
+
+def _fix_mojibake(s: str) -> str:
+    """Desfaz mojibake cp1252→utf-8 que a API do Panda retorna nos nomes.
+
+    A API envia strings onde bytes UTF-8 foram reinterpretados como cp1252
+    e depois reencodados como UTF-8, resultando em múltiplas camadas de
+    corrupção. Aplica o processo inverso até o texto estabilizar.
+    """
+    for _ in range(5):
+        try:
+            new_s = s.encode("cp1252").decode("utf-8")
+            if new_s == s:
+                break
+            s = new_s
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            break
+    return s
 
 
 PANDA_BASE_URL = "https://api-v2.pandavideo.com.br"
@@ -37,6 +55,11 @@ class PandaFolder(BaseModel):
     name: str
     parent_folder_id: Optional[str] = None
 
+    @field_validator("name", mode="before")
+    @classmethod
+    def fix_name_encoding(cls, v: object) -> object:
+        return _fix_mojibake(v) if isinstance(v, str) else v
+
 
 class PandaVideo(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -52,6 +75,11 @@ class PandaVideo(BaseModel):
     status: str = "unknown"
     created_at: Optional[str] = None
     video_external_id: Optional[str] = None
+
+    @field_validator("title", "description", mode="before")
+    @classmethod
+    def fix_text_encoding(cls, v: object) -> object:
+        return _fix_mojibake(v) if isinstance(v, str) else v
 
 
 class PandaClient:
