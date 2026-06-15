@@ -6,9 +6,12 @@ __pycache__/
 data/downloads/
 data/manifest.json
 data/token_cache.json
+data/.sp_token_cache.json
 data/migration_log.md
 data/migration_log.csv
+data/*.bak*
 logs/*.log
+scripts/*.txt
 .DS_Store
 Thumbs.db
 .mypy_cache/

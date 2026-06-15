@@ -5,10 +5,13 @@ completa do polling de encoding — incluindo o body quando status = ERROR.
 Uso:
     python probe_encoding.py
 """
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import asyncio
 import json
 import logging
-import tempfile
 from pathlib import Path
 
 import httpx
