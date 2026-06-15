@@ -69,6 +69,21 @@ git add <arquivos alterados>
 git commit -m "tipo: descrição"
 ```
 
+## Scripts de diagnóstico
+
+Scripts utilitários e de diagnóstico ficam em `scripts/`. **Nunca criar scripts avulsos na raiz do projeto.**
+
+| Script | Propósito |
+|---|---|
+| `check_manifest.py` | Inspeciona estado do manifest |
+| `check_duplicates.py` | Detecta vídeos duplicados |
+| `check_depoimentos.py` | Verifica pasta de depoimentos |
+| `check_panda_storage.py` | Checa uso de storage no Panda |
+| `probe_sp_api.py` | Probe genérico da API do SmartPlayer |
+| `probe_encoding.py` | Diagnóstico de encoding: baixa vídeo do Panda, sobe pro SP e loga resposta completa |
+| `probe_sp_delete.py` | Deleta mídias no SP via API |
+| `reset_failed.py` | Reseta vídeos failed no manifest |
+
 ## Known Gaps
 
 - Thumbnail download is not implemented (SmartPlayer auto-generates from video frames)
