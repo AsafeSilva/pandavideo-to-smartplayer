@@ -187,6 +187,8 @@ class SmartPlayerClient:
             f"{self._base_url}/medias/{media_code}",
             headers=headers,
         )
+        if r.status_code == 404:
+            return {}
         r.raise_for_status()
         urls = r.json().get("urlsUpload") or {}
         return urls
@@ -216,13 +218,19 @@ class SmartPlayerClient:
 
     @_retry_http()
     async def poll_status(self, media_code: str) -> str:
+        import logging as _logging
+        _log = _logging.getLogger(__name__)
         headers = await self._authed_headers()
         r = await self._client.get(
             f"{self._base_url}/medias/{media_code}",
             headers=headers,
         )
         r.raise_for_status()
-        return r.json().get("status", "UNKNOWN")
+        body = r.json()
+        status = body.get("status", "UNKNOWN")
+        if status == "ERROR":
+            _log.error("[SP] encoding ERROR — body completo: %s", body)
+        return status
 
     @_retry_http()
     async def move_media(self, folder_code: str, media_codes: list[str]) -> None:
@@ -237,10 +245,15 @@ class SmartPlayerClient:
 
     @_retry_http()
     async def delete_media(self, media_code: str) -> None:
+        import json as _json
         headers = await self._authed_headers()
-        r = await self._client.delete(
-            f"{self._base_url}/medias/{media_code}",
+        headers["Content-Type"] = "application/json"
+        body = _json.dumps([{"code": media_code}]).encode()
+        r = await self._client.request(
+            "DELETE",
+            f"{self._base_url}/medias/lists",
             headers=headers,
+            content=body,
         )
         if r.status_code != 404:
             r.raise_for_status()
