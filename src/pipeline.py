@@ -121,7 +121,7 @@ async def download_one(
             dashboard.on_download_phase(video_id, "concluído")
 
 
-SP_TERMINAL_STATUSES = {"COMPLETED"}
+SP_TERMINAL_STATUSES = {"COMPLETED", "PARTIAL_COMPLETED"}
 SP_ERROR_STATUSES = {"ERROR"}
 
 
