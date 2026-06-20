@@ -33,20 +33,19 @@ async def _collect_videos(panda, manifest: Manifest, folder_id: str, folder_labe
         ))
         count += 1
 
-    # Se a pasta não tem vídeos diretos, vasculha subpastas
-    if count == 0:
-        subfolders = await panda.list_folders(parent_folder_id=folder_id)
-        for sub in subfolders:
-            sub_label = f"{folder_label} / {sub.name}"
-            existing_sub = manifest.folders.get(sub_label)
-            manifest.upsert_folder(
-                sub_label,
-                FolderEntry(
-                    panda_folder_id=sub.id,
-                    sp_folder_code=existing_sub.sp_folder_code if existing_sub else None,
-                ),
-            )
-            count += await _collect_videos(panda, manifest, sub.id, sub_label)
+    # Sempre vasculha subpastas (uma pasta pode ter vídeos diretos E subpastas)
+    subfolders = await panda.list_folders(parent_folder_id=folder_id)
+    for sub in subfolders:
+        sub_label = f"{folder_label} / {sub.name}"
+        existing_sub = manifest.folders.get(sub_label)
+        manifest.upsert_folder(
+            sub_label,
+            FolderEntry(
+                panda_folder_id=sub.id,
+                sp_folder_code=existing_sub.sp_folder_code if existing_sub else None,
+            ),
+        )
+        count += await _collect_videos(panda, manifest, sub.id, sub_label)
 
     return count
 
