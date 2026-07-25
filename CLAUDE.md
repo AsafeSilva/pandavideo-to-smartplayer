@@ -86,6 +86,7 @@ Scripts utilitários e de diagnóstico ficam em `scripts/`. **Nunca criar script
 | `reset_failed.py` | Reseta vídeos failed no manifest |
 | `reset_failed_sp_cleanup.py` | Deleta mídias FAILED no SP e reseta manifest para PENDING |
 | `rediscover_folder.py` | Re-descobre vídeos de uma pasta pelo panda_folder_id |
+| `transcribe_aula.py` | Transcreve aulas do SP: baixa só a trilha de áudio do HLS e roda faster-whisper → `transcricoes/<módulo>/<título>.md` |
 
 ## Known Gaps
 

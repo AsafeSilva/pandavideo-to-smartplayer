@@ -10,6 +10,7 @@ data/.sp_token_cache.json
 data/migration_log.md
 data/migration_log.csv
 data/*.bak*
+data/temp_audio/
 logs/*.log
 scripts/*.txt
 .DS_Store
