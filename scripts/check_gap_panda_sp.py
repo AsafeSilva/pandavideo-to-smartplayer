@@ -109,7 +109,12 @@ async def collect_panda(settings: Settings) -> list[dict]:
 
 
 async def collect_sp(settings: Settings) -> list[dict]:
-    """Todas as mídias do SmartPlayer, paginando /medias/names."""
+    """Mídias do SmartPlayer, paginando /medias/names.
+
+    ATENÇÃO: /medias/names OMITE mídias em PARTIAL_COMPLETED. Um vídeo que exista
+    no SP nesse estado e não esteja no manifest aparece aqui como gap (falso
+    positivo). Confirme com GET /medias/{code} ou pelo painel antes de remigrar.
+    """
     items: list[dict] = []
     async with SmartPlayerClient(
         client_id=settings.sp_client_id,
