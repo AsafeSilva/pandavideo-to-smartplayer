@@ -47,6 +47,50 @@ def test_save_is_atomic(tmp_path: Path, monkeypatch):
     assert m_orig.videos["v1"].title == "ok"
 
 
+def test_save_retries_permission_error_on_replace(tmp_path: Path, monkeypatch):
+    """WinError 5 no os.replace (antivírus/indexador com o destino aberto) é
+    transitório — o save deve reintentar em vez de derrubar o vídeo em migração."""
+    path = tmp_path / "manifest.json"
+    m = Manifest.load(path)
+    m.upsert_video(VideoEntry(panda_id="v1", panda_folder="F1", title="T1"))
+
+    import src.manifest as mod
+    real_replace = mod.os.replace
+    calls = {"n": 0}
+
+    def flaky(src_, dst_, *a, **kw):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise PermissionError(13, "Acesso negado")
+        return real_replace(src_, dst_, *a, **kw)
+
+    monkeypatch.setattr(mod.os, "replace", flaky)
+    monkeypatch.setattr(mod.time, "sleep", lambda *_: None)
+
+    m.save()
+
+    assert calls["n"] == 3
+    assert Manifest.load(path).videos["v1"].title == "T1"
+
+
+def test_save_reraises_permission_error_after_attempts(tmp_path: Path, monkeypatch):
+    """Se nunca liberar, o erro sobe — não engolir falha de persistência."""
+    path = tmp_path / "manifest.json"
+    m = Manifest.load(path)
+    m.upsert_video(VideoEntry(panda_id="v1", panda_folder="F1", title="T1"))
+
+    import src.manifest as mod
+    monkeypatch.setattr(
+        mod.os, "replace",
+        lambda *a, **kw: (_ for _ in ()).throw(PermissionError(13, "Acesso negado")),
+    )
+    monkeypatch.setattr(mod.time, "sleep", lambda *_: None)
+
+    with pytest.raises(PermissionError):
+        m.save()
+    assert not (tmp_path / "manifest.json.tmp").exists()
+
+
 def test_transition_updates_state_and_persists(tmp_path: Path):
     path = tmp_path / "manifest.json"
     m = Manifest.load(path)

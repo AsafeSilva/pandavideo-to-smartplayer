@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import asdict, fields as dc_fields
 from pathlib import Path
 from typing import Optional
@@ -46,10 +47,23 @@ class Manifest:
         try:
             with tmp.open("w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2, ensure_ascii=False)
-            os.replace(tmp, self.path)
+            self._replace_with_retry(tmp)
         except:
             tmp.unlink(missing_ok=True)
             raise
+
+    def _replace_with_retry(self, tmp: Path, attempts: int = 6) -> None:
+        """os.replace com retry — no Windows falha com WinError 5 quando antivírus,
+        indexador ou outro leitor tem o destino aberto. É transitório: basta esperar.
+        Sem isso, uma colisão de milissegundos derruba o vídeo em migração."""
+        for i in range(attempts):
+            try:
+                os.replace(tmp, self.path)
+                return
+            except PermissionError:
+                if i == attempts - 1:
+                    raise
+                time.sleep(0.2 * (i + 1))
 
     def upsert_folder(self, name: str, entry: FolderEntry) -> None:
         self.folders[name] = entry
